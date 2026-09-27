@@ -1,0 +1,82 @@
+schema: a3_joint_map/v1
+generated_by: tools/make_joint_map.py
+policy_joint_names:
+- waist_yaw_joint
+- waist_roll_joint
+- waist_pitch_joint
+- left_shoulder_pitch_joint
+- left_shoulder_roll_joint
+- left_shoulder_yaw_joint
+- left_elbow_joint
+- left_wrist_roll_joint
+- left_wrist_pitch_joint
+- left_wrist_yaw_joint
+- right_shoulder_pitch_joint
+- right_shoulder_roll_joint
+- right_shoulder_yaw_joint
+- right_elbow_joint
+- right_wrist_roll_joint
+- right_wrist_pitch_joint
+- right_wrist_yaw_joint
+- left_hip_pitch_joint
+- left_hip_roll_joint
+- left_hip_yaw_joint
+- left_knee_joint
+- left_ankle_pitch_joint
+- left_ankle_roll_joint
+- right_hip_pitch_joint
+- right_hip_roll_joint
+- right_hip_yaw_joint
+- right_knee_joint
+- right_ankle_pitch_joint
+- right_ankle_roll_joint
+aliases: {}
+forbidden_source_names:
+- head_yaw_joint
+- head_pitch_joint
+- left_foot_forefoot_joint
+- left_foot_toe_joint
+- right_foot_forefoot_joint
+- right_foot_toe_joint
+known_alias_candidates:
+- left_ankle_pitch
+- left_ankle_roll
+- left_elbow
+- left_elbow_Link
+- left_hip_pitch
+- left_hip_roll
+- left_hip_yaw
+- left_knee
+- left_knee_Link
+- left_shoulder_pitch
+- left_shoulder_roll
+- left_shoulder_yaw
+- left_wrist_pitch
+- left_wrist_roll
+- left_wrist_yaw
+- right_ankle_pitch
+- right_ankle_roll
+- right_elbow
+- right_elbow_Link
+- right_hip_pitch
+- right_hip_roll
+- right_hip_yaw
+- right_knee
+- right_knee_Link
+- right_shoulder_pitch
+- right_shoulder_roll
+- right_shoulder_yaw
+- right_wrist_pitch
+- right_wrist_roll
+- right_wrist_yaw
+- waist_pitch
+- waist_pitch_Link
+- waist_roll
+- waist_roll_Link
+- waist_yaw
+- waist_yaw_Link
+notes:
+- policy order is the 29-DoF MuJoCo policy view from generated/a3_contract.json
+- aliases map alternative source names onto policy joint names
+- forbidden_source_names must never appear in a policy vector
+- no code may slice qpos by index; always resolve names through this map
