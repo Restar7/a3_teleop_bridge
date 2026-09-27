@@ -63,17 +63,22 @@ root z          1.0733 m      1.0733 m
 RMSE(29)        0.05365       0.05365
 ```
 
-耐久(连续 cross-fade 参考,`logs/m6_endurance_final/`):
+耐久(连续 cross-fade 参考,`logs/m6_endurance_7min/`,**最终版本**):
 
 ```text
-policy steps   16000(= 320 s policy 时间)
-wall clock     265 s
+policy steps   18000(= 360 s policy 时间 / 288 s 墙钟)
 fall           false
-root z         mean 1.0694 m
-RMSE(29)       0.1596
-publisher      13296 帧 @ 49.97 Hz,rejected=0,seq 单调(13296)
-参考窗口        skipped_no_state=0(从未发出占位窗口)
+root z         mean 1.0729 m
+RMSE(29)       0.1262
+publisher      14253 帧 @ 49.0 Hz,rejected=0,seq 单调
+receiver       received 11928,rejected 0,interpolated 11998
 ```
+
+为什么需要「有界插值」:参考流是 latest-only,消费者比发布者慢时会被直接塞进一个
+向前跳了若干 slot 的窗口(实测 6 分钟内 279 次跳变、最大 200 ms),policy 会在
+不连续参考处摔倒。现在 SONIC 侧 provider 保留上一拍发出的窗口并朝最新窗口插值
+(root 四元数用带半球修正的 nlerp),**每拍最多前进一个 20 ms slot**;
+`interpolated / max_gap_ms` 计入统计,卡顿可见而不是静默产生跳变。
 
 耐久测试中定位并修复的 3 个问题(详见 `progress.md`):
 `--batch-once` 无实时基 → 新增 `--realtime`;循环播放重置 seq 且发占位窗口 →

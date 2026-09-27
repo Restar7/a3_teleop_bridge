@@ -157,6 +157,26 @@ def main(argv: list[str] | None = None) -> int:
         problems.append("publisher could not bind its port (a stale publisher is running?)")
     if not metrics:
         problems.append("no metrics produced")
+    stream_stats = {}
+    if (out_dir / "sim2sim.log").is_file():
+        import re as _re
+
+        text = (out_dir / "sim2sim.log").read_text(encoding="utf-8", errors="replace")
+        match = _re.search(r"\[reference-stream\] (\{.*\})", text)
+        if match:
+            try:
+                stream_stats = json.loads(match.group(1).replace("'", '"'))
+            except json.JSONDecodeError:
+                stream_stats = {"raw": match.group(1)}
+    if stream_stats:
+        # Received-window gaps are normal for a latest-only stream (the publisher
+        # is faster than the consumer); the provider interpolates towards the
+        # newest window and bounds the per-tick advance to one slot.  Report the
+        # gaps as diagnostics, fail only on real problems.
+        if stream_stats.get("rejected"):
+            problems.append(f"receiver rejected {stream_stats['rejected']} packets")
+        if not stream_stats.get("received"):
+            problems.append("no reference windows were received")
 
     report = {
         "csv": str(Path(args.csv).expanduser()),
@@ -169,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         "root_roll_pitch_abs_max_deg": metrics.get("root_roll_pitch_abs_max_deg"),
         "all_29_rmse": (metrics.get("tracking") or {}).get("all_29_rmse"),
         "publisher_tail": pub_text.strip().splitlines()[-3:],
+        "stream_stats": stream_stats,
         "sim2sim_log": str(sim_log_path),
         "acceptable": not problems,
         "problems": problems,
@@ -179,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[m6] fall={metrics.get('fall')} root_z={(metrics.get('root_height') or {}).get('mean')}")
     print(f"[m6] RMSE(29)={(metrics.get('tracking') or {}).get('all_29_rmse')}")
     print(f"[m6] publisher: {report['publisher_tail']}")
+    if stream_stats:
+        print(f"[m6] stream   : {stream_stats}")
     print(f"[m6] report: {out_dir / 'm6_report.json'}")
     if problems:
         print("[m6] FAILED:")

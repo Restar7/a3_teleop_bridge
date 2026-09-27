@@ -379,6 +379,13 @@
      —— 跳变参考本身就是故障输入。耐久必须用**连续**轨迹:
      `tools/make_endurance_clip.py` 对相邻 clip 做 20 帧 cross-fade
      (最大关节步进 0.087 rad、root 步进 0.0014 m),然后重复 8 次 = 240 s。
+  4. 即使参考连续,**消费者比发布者慢**时 latest-only 流仍会把窗口向前跳若干 slot
+     (实测 6 分钟 279 次跳变、最大 200 ms)→ policy 摔倒。修复:SONIC 侧
+     `StreamingReferenceProvider` 保留上一拍窗口并朝最新窗口插值(四元数 nlerp),
+     每拍最多前进一个 slot,并把 `interpolated / max_gap_ms` 计入统计
+     (sonic_for_a3 `e735bba`)。
+     最终耐久(18000 步 / 288 s 墙钟 / 360 s 参考):`fall=false`,root z 1.0729,
+     RMSE 0.1262,publisher 49.0 Hz,receiver rejected=0。
 - **下一阶段**: commit 19(实时 PICO → UMR online → MuJoCo,需要 PICO 硬件)、
   commit 20/21(benchmark / 故障注入)
 
