@@ -5,7 +5,8 @@
 > 本文所有命令都可直接复制;凡本机未实测的步骤都标注了 **[需 Orin 硬件]**。
 >
 > 相关文档:`A3_ONBOARD.md`(机载侧)、`DELIVERY.md`(交付物/仓库/**部署公钥**/推送命令)、
-> `docs/safety.md`、`docs/pico_setup.md`、`ORIN_BLOCKER.md`。
+> `pico_setup.md`(PICO 头显 + SDK + 发送端)、`GO_LIVE_CHECKLIST.md`(单页上线清单)、
+> `docs/safety.md`、`ORIN_BLOCKER.md`。
 
 ---
 
@@ -170,8 +171,11 @@ ping -c 3 192.168.10.20
 ```bash
 # --- Orin:启动 PICO 发送端(XRoboToolkit PC service 必须已连上头显) ---
 cd ~/a3_teleop_ws/sonic_for_a3
-.venv_sim/bin/python gear_sonic/scripts/pico_pose_zmq_minimal.py --port 5556
-# 看到持续输出即 PICO → SMPL 通了;先别连 A3 policy
+.venv_sim/bin/python gear_sonic/scripts/pico_pose_zmq_minimal.py \
+    --port 5556 --target_fps 50 --start_unpaused
+# 该发送端**默认 PAUSED**:必须加 --start_unpaused,或按手柄 A 键切到 RUNNING
+# 判据:日志 "Stream state: RUNNING" 且 sent 递增;否则后面一步永远收不到帧
+# 细节与 SDK 安装(setup_orin.sh)见 docs/pico_setup.md
 
 # --- Orin:第二个终端,启动参考生成(online UMR + predictor + publisher) ---
 cd ~/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh

@@ -182,6 +182,8 @@ bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz -
 | 手册 | 内容 |
 | --- | --- |
 | [`docs/DEPLOY_ORIN.md`](docs/DEPLOY_ORIN.md) | Orin 全流程:预检 → 环境重建 → SMPL-X 手工拷贝 → 就绪门禁(16 项)→ 网络 → PICO+UMR live → MuJoCo 消费端验证 → 长跑/故障注入 → fallback |
+| [`docs/GO_LIVE_CHECKLIST.md`](docs/GO_LIVE_CHECKLIST.md) | **单页上线清单**:打包→Orin→PICO→MuJoCo 复核→机载→悬吊 10 级,每步带命令与判据 |
+| [`docs/pico_setup.md`](docs/pico_setup.md) | PICO 头显 + PC Service + `xrobotoolkit_sdk`(x86/Orin)+ 发送端 + 收帧验证 |
 | [`docs/DELIVERY.md`](docs/DELIVERY.md) | 交付清单、目标仓库、**部署公钥**、推送命令、bundle 离线路径 |
 | [`docs/A3_ONBOARD.md`](docs/A3_ONBOARD.md) | A3 机载:交叉编译 rockchip 包 → 传输 → MDU 服务配置(agent-only)→ receive-only probe → 接入 `A3_REFERENCE_V1` → 悬吊 10 级动作 → 安全降级 |
 
