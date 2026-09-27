@@ -1,0 +1,17 @@
+# python
+__pycache__/
+*.py[cod]
+.venv*/
+*.egg-info/
+.pytest_cache/
+
+# generated / runtime artifacts (contract JSON and limits ARE tracked)
+generated/*.tmp
+cache/
+recordings/
+logs/
+benchmarks/*.json
+
+# editor
+.vscode/
+.idea/
