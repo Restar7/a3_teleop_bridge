@@ -28,6 +28,7 @@ from ..a3.csv_export import A3FlatCsvCodec
 from ..a3.predictor import A3ReferencePredictor
 from ..clocks import LatencyStats, now_ns
 from ..contract import load_contract
+from ..types import BridgeState
 from ..transport.publisher import NetworkConfig, ReferencePublisher
 from ..umr.offline import load_umr_result
 
@@ -101,9 +102,13 @@ def main(argv: list[str] | None = None) -> int:
     period = 1.0 / max(args.publish_hz, 1e-6)
     start = time.perf_counter()
     next_tick = start
+    # Playback follows SOURCE time, not the publish rate: a 30 fps clip is held
+    # for ~1.67 publish ticks per frame instead of being sped up 1.67x.
+    source_time = 0.0
     index = 0
     published = 0
     rejected = 0
+    skipped = 0
     age_stats = LatencyStats("publish_period")
     last_report = start
     end_time = start + args.duration if args.duration > 0 else None
@@ -113,11 +118,16 @@ def main(argv: list[str] | None = None) -> int:
             now = time.perf_counter()
             if end_time is not None and now >= end_time:
                 break
+            index = int(source_time / source_dt)
             if index >= len(states):
                 if not args.loop:
                     break
-                index = 0
-                predictor.reset()
+                source_time -= len(states) * source_dt
+                index = int(source_time / source_dt)
+                # NOTE: never reset the predictor here. A reset would drop the
+                # last safe state and make the next window an all-default
+                # placeholder, and it would restart the sequence number -- both
+                # are protocol/safety violations (seq must be monotonic).
 
             state = states[index]
             # re-stamp the frame onto the wall clock so the window carries a live
@@ -127,12 +137,18 @@ def main(argv: list[str] | None = None) -> int:
             if not accepted:
                 rejected += 1
             window = predictor.window(timestamp_ns=now_ns(), source_age_ms=0.0)
+            if window.state is BridgeState.DISCONNECTED:
+                # no accepted state yet: publishing a default-pose window would
+                # look like a valid reference to the policy
+                skipped += 1
+                source_time += source_dt
+                continue
             publisher.send(window)
             published += 1
-            index += 1
+            source_time += period * max(args.speed, 1e-6)
 
             if args.realtime:
-                next_tick += period / max(args.speed, 1e-6)
+                next_tick += period
                 sleep = next_tick - time.perf_counter()
                 if sleep > 0:
                     time.sleep(sleep)
@@ -159,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             "elapsed_s": elapsed,
             "effective_hz": published / max(elapsed, 1e-9),
             "rejected": rejected,
+            "skipped_no_state": skipped,
             "last_seq": predictor.seq,
         }
         publisher.close()
