@@ -66,8 +66,14 @@ done
 # UMR writes these next to the source MJCF and they embed the *workstation* paths
 find "$STAGE/sonic_for_a3" -name "*.floating_mjcf.xml" -delete 2>/dev/null || true
 
-# 38 MB of docs/media is not needed on the robot; the runbooks are in the bridge
-rm -rf "$STAGE/sonic_for_a3/docs" 2>/dev/null || true
+# 38 MB of docs/media is not needed on the robot; the runbooks are in the bridge,
+# but keep this repository's own delivery document
+if [ -f "$SONIC_ROOT/docs/a3_teleop_deployment.md" ]; then
+  mkdir -p "$STAGE/sonic_for_a3/docs"
+  cp -a "$SONIC_ROOT/docs/a3_teleop_deployment.md" "$STAGE/sonic_for_a3/docs/"
+fi
+rm -rf "$STAGE/sonic_for_a3/docs/a3_024_sim2real_materials" "$STAGE/sonic_for_a3/docs/licenses" 2>/dev/null || true
+find "$STAGE/sonic_for_a3/docs" -maxdepth 1 -name "*.md" ! -name "a3_teleop_deployment.md" -delete 2>/dev/null || true
 find "$STAGE/sonic_for_a3" -type d -name "media" -prune -exec rm -rf {} + 2>/dev/null || true
 find "$STAGE/sonic_for_a3" -type d -name "node_modules" -prune -exec rm -rf {} + 2>/dev/null || true
 

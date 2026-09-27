@@ -157,6 +157,17 @@ $A3WS/UMR/.venv_umr/bin/python -m a3_teleop_bridge.apps.retarget_live \
 > 同一台机器上策略与 UMR 抢 CPU 会把 p95 拉到 200 ms 以上,真机按方案 §22–24
 > 把 UMR 放到 Orin 即可消除。
 
+## 推送用的部署公钥
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDrJ4lUXNPn69rNCjgRhkAieGpu3AMAnOzjeAaeTCXPi a3-teleop-orin-deploy
+```
+
+指纹 `SHA256:WJ5l9QV0feolYc1LTRAOn0Tjd4G44CBCi/M0E2NQn0o`;加到 GitHub 账号级
+**Settings → SSH and GPG keys**(不是单仓库 Deploy key,因为要推多个仓库)。
+私钥仅存在打包机 `~/.ssh/id_ed25519_github_a3`(600),不要在仓库里出现。
+详见 [`docs/DELIVERY.md`](docs/DELIVERY.md) §3。
+
 ## 部署与迁移到真机(Orin + A3 机载)
 
 交付一个包、两台机器、两条手册:
