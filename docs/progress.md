@@ -625,3 +625,25 @@
     说明「请求步数 ≠ 实际步数」;`run_live_chain.py` 已改为从 `metrics.json`
     读实际步数,本次也用 `num_policy_steps` 复核。
 - **下一阶段**: 无硬件可做的验收项已全部完成;M7 真实头显、M9–M12(Orin/A3 真机)待硬件
+
+## 阶段 交付 — 代码推送 GitHub(已完成)
+
+- **执行命令**:
+  ```bash
+  ssh -T git@github.com                      # Hi Restar7! You've successfully authenticated
+  git -C sonic_for_a3 push git@github.com:Restar7/sonic_for_a3.git feat/a3-streaming-reference
+  git -C a3_teleop_bridge remote add origin git@github.com:Restar7/a3_teleop_bridge.git
+  git -C a3_teleop_bridge push -u origin main
+  ```
+- **结果**: **PASS**
+  ```text
+  sonic_for_a3  feat/a3-streaming-reference  1fcdf7f  (LFS 108 objects / 73 MB)
+  a3_teleop_bridge  main                     109d8b0  (新仓库首推)
+  sonic_for_a3  main 未改动                  fe6868b
+  UMR           feat/a3-online-retarget      ⛔ hanyang9/UMR 无写权限,改用 bundle
+  ```
+- **验证**: 从 GitHub 全新 clone 两个仓库,确认 `docs/a3_teleop_deployment.md`、
+  `docs/{DELIVERY,DEPLOY_ORIN,A3_ONBOARD}.md`、`README.md`(含公钥)、`scripts/` 8 个脚本都在。
+- **交付物**: `dist/a3_teleop_orin_20260927_121056.tar.gz`(14 MB,含 MANIFEST 记三仓库 SHA)、
+  `dist/*.bundle`。
+- **下一阶段**: Orin/M9–M12 需硬件;上机时按 `docs/DEPLOY_ORIN.md` → `docs/A3_ONBOARD.md` 执行。

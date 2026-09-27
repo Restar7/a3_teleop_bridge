@@ -61,7 +61,9 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDrJ4lUXNPn69rNCjgRhkAieGpu3AMAnOzjeAaeTCXPi
 - 加到**账号级 SSH keys**(不要加单个仓库的 Deploy key):因为要推两个(或三个)仓库,
   而同一个公钥只能作为**一个**仓库的 deploy key。
 - 加完后本机验证:`ssh -T git@github.com` 应回 `Hi <你的账号>! You've successfully authenticated`。
-  当前状态:**尚未添加**(`Permission denied (publickey)`)。
+  当前状态:**已添加并验证通过** —— `Hi Restar7! You've successfully authenticated`。
+- 本机已写入 `~/.ssh/config`(`Host github.com` → `IdentityFile ~/.ssh/id_ed25519_github_a3`,
+  `IdentitiesOnly yes`),所以 `git push` 无需额外参数。
 
 重新生成/轮换(如需):
 
@@ -108,3 +110,23 @@ git push origin feat/a3-streaming-reference
 ```
 
 或者直接用上机包 `tar.gz` 拷到 Orin,不经过 GitHub(见 `DEPLOY_ORIN.md` §2)。
+
+## 6. 推送记录(已完成)
+
+| 仓库 | 分支 | 远端 SHA | 状态 |
+| --- | --- | --- | --- |
+| https://github.com/Restar7/sonic_for_a3 | `feat/a3-streaming-reference` | `1fcdf7f` | ✅ 已推送(含 LFS 108 objects / 73 MB) |
+| https://github.com/Restar7/a3_teleop_bridge | `main` | `109d8b0` | ✅ 已推送(新仓库首推) |
+| https://github.com/hanyang9/UMR | `feat/a3-online-retarget` | `9341764` | ⛔ 无写权限(第三方上游);用 `dist/UMR_feat_incremental.bundle` 或 fork 到自己账号 |
+
+校验方式(本机实测):
+
+```bash
+cd /tmp && git clone --depth 1 -b feat/a3-streaming-reference \
+    git@github.com:Restar7/sonic_for_a3.git gh_check
+grep -h "ssh-ed25519 AAAA" gh_check/docs/a3_teleop_deployment.md   # 公钥在线可见
+git clone --depth 1 git@github.com:Restar7/a3_teleop_bridge.git gh_bridge
+ls gh_bridge/docs gh_bridge/scripts                               # 16 份文档 + 8 个脚本
+```
+
+`sonic_for_a3` 的 `main` 未被改动(仍为 `fe6868b`,方案 §0 第 1 条)。
