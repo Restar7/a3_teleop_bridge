@@ -40,15 +40,15 @@
 
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| — | **M2**:UMR 官方 G1 baseline | `output/unitree_g1_retarget/*.npz` 存在,qpos/fps/robot_joint_names 正常 | 🔄 env 已就绪,待 SMPL-X 解包 |
-| 04 | `robot_configs/humanoid_retarget_agibot_a3.json` + env var 展开 | 使用 sonic_for_a3 的 035 MJCF | ⏸ |
-| 05 | `configs/a3_joint_map.yaml`(名称映射,禁止 index 假设) | assert 29 唯一 joint,head/passive 不在 policy | ⏸ |
-| 06 | `umr/state_converter.py` → `A3CanonicalState` | 名称映射 + clamp + 有限差分速度;dt 异常置 invalid | ⏸ |
-| 07 | `a3/csv_export.py` + `tests/test_csv_roundtrip.py` | 与官方 sample CSV round-trip 一致 | ⏸ |
+| — | **M2**:UMR 官方 G1 baseline | `output/unitree_g1_retarget/*.npz` 存在,qpos/fps/robot_joint_names 正常 | ✅ 3945 帧 / 0 NaN / cost 0.056 |
+| 04 | `robot_configs/humanoid_retarget_agibot_a3.json` + env var 展开 | 使用 sonic_for_a3 的 035 MJCF | ✅ UMR 91895f3 |
+| 05 | `configs/a3_joint_map.yaml`(名称映射,禁止 index 假设) | assert 29 唯一 joint,head/passive 不在 policy | ✅ |
+| 06 | `umr/state_converter.py` → `A3CanonicalState` | 名称映射 + clamp + 有限差分速度;dt 异常置 invalid | ✅ 74 tests |
+| 07 | `a3/csv_export.py` + `tests/test_csv_roundtrip.py` | 与官方 sample CSV round-trip 一致 | ✅ 与官方 loader 逐数组一致 |
 | 08 | **M3/M4**:`SMPL-X → UMR → A3 → CSV → A3-fast → MuJoCo` | 站立/抬手/屈膝/转体/抬脚/慢步 6 个动作通过 | ⏸ |
 
-> ⛔ 已知外部依赖:`UMR/smpl/SMPLX_NEUTRAL.pkl|npz`(官方许可资产,禁止绕过许可)。
-> 缺失时按方案 §11 输出 `BLOCKED_EXTERNAL_ASSET`。
+> ✅ 外部依赖已解决:用户提供官方 SMPL-X v1.1 包,已装入 `UMR/smpl/SMPLX_NEUTRAL.{pkl,npz}`
+> (sha256 记录在 `progress.md`)。
 
 ### 阶段 C — PICO 链路
 

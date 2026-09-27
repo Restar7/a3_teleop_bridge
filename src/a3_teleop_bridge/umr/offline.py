@@ -77,9 +77,13 @@ def _scalar_joint_addrs(robot_xml: Path) -> dict[str, int]:
     import mujoco
 
     model = mujoco.MjModel.from_xml_path(str(robot_xml))
+    # NOTE: mujoco's mjtJoint members do not compare symmetrically against numpy
+    # scalars, so `x in (mjJNT_HINGE, mjJNT_SLIDE)` silently yields False.  Always
+    # compare plain ints (UMR itself does the same).
+    scalar_types = (int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE))
     addrs: dict[str, int] = {}
     for jid in range(model.njnt):
-        if model.jnt_type[jid] not in (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE):
+        if int(model.jnt_type[jid]) not in scalar_types:
             continue
         name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jid)
         if name:

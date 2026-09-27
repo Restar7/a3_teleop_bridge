@@ -72,9 +72,10 @@ class Model:
         self.data = mujoco.MjData(self.model)
         self.limits = limits
         self.qpos_adr: dict[str, int] = {}
+        hinge = int(mujoco.mjtJoint.mjJNT_HINGE)
         for jid in range(self.model.njnt):
             name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, jid)
-            if self.model.jnt_type[jid] == mujoco.mjtJoint.mjJNT_HINGE:
+            if int(self.model.jnt_type[jid]) == hinge:
                 self.qpos_adr[name] = int(self.model.jnt_qposadr[jid])
         self.body_id = {
             mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, bid): bid

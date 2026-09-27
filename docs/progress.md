@@ -148,3 +148,73 @@
 - **已知问题**: 无(用 uv 替代方案中的 conda env `umr`)
 - **下一阶段**: UMR 官方 G1 baseline(需 SMPL-X neutral body model)
 
+---
+
+## 阶段 SMPL-X — 外部许可资产落地(方案 §11)
+
+- **来源**: 用户提供的官方 SMPL-X v1.1 压缩包 `models_smplx_v1_1.zip`
+  (sha256 `cb593838a5d602395735081c7a8fd1d6b04fba261042b84e24644d875039be61`,870,108,517 B)
+- **解压路径**: `~/a3_teleop_ws/cache/downloads/smplx_extract/models/smplx/`
+- **最终选用**:
+  ```text
+  UMR/smpl/SMPLX_NEUTRAL.pkl  sha256 381c808965deb4f5e845f8c3eddb0cd69930cc72e5774ce4f34c4ce3cf058361
+  UMR/smpl/SMPLX_NEUTRAL.npz  sha256 376021446ddc86e99acacd795182bbef903e61d33b76b9d8b359c2b0865bd992
+  ```
+  未使用 MALE/FEMALE / removed-head-bun / Julia / SMPL-X 2020。
+- **同时完成**: `UMR/robot_configs/humanoid_retarget_agibot_a3.json` + UMR config loader
+  的 `${VAR}`/`~` 展开(commit `91895f3` on `feat/a3-online-retarget`)
+- **结果**: PASS
+- **下一阶段**: M2
+
+---
+
+## 阶段 M2 — 官方 UMR G1 baseline
+
+- **执行命令**:
+  ```bash
+  cd ~/a3_teleop_ws/UMR
+  .venv_umr/bin/python scripts/humanoid_retarget_pipeline.py \
+      --config robot_configs/humanoid_retarget_unitree_g1_example.json --skip-view
+  ```
+- **输入**: `sample_data/lafan1_smplx/dance1_subject2.npz` + `smpl/SMPLX_NEUTRAL.pkl`
+- **输出**:
+  ```text
+  output/unitree_g1_retarget/dance1_subject2_smplx_unitree_g1.npz
+  output/correspondence_unitree_g1_smplx_neutral_betas_c4eb7419e9/{checkpoint-final.pt,correspondence_slots_final.npz}
+  logs/umr/g1_baseline.log
+  ```
+- **结果**: **PASS**(`tools/inspect_umr_result.py`)
+  ```text
+  qpos            = (3945, 36)   29 scalar joints, 36 = free(7) + 29
+  fps / dt        = 30.0 / 0.0333 s
+  NaN count       = 0
+  root height     = mean 0.746 m
+  |quat|          = [1.000000, 1.000000]
+  correspondence  = chamfer 0.000106 (500 epochs, 4090)
+  retarget cost   = mean 0.0559 max 0.2425
+  ```
+- **已知问题**:
+  - UMR 结果里的 `robot_joint_names` 与 `qpos` **不是**连续对应的(自由关节 + 球关节
+    占 4 个 qpos 槽),必须经 robot XML 解析 qpos 地址 — 已在 `umr/offline.py` 实现并断言。
+  - mujoco 3.14 的 `mjtJoint` 枚举与 numpy 标量比较不对称(`x in (mjJNT_HINGE, ...)`
+    静默为 False),已改为 `int()` 比较(此 bug 曾导致 qpos 地址解析为空)。
+- **下一阶段**: M3 — 用同一个 UMR 把 SMPL-X 动作重定向到 A3
+
+---
+
+## 阶段 06+07 — UMR→A3 state converter 与 A3 flat CSV codec
+
+- **commit**: `c576998`
+- **执行命令**: `pytest -q`(74 tests)
+- **输入/输出**:
+  - `umr/offline.py`: UMR npz → `UmrResult`(名字→qpos 地址经 XML 解析并断言)
+  - `umr/state_converter.py`: → `A3CanonicalState`(root + 名称映射 + clamp + 有限差分速度)
+  - `a3/csv_export.py`: ↔ flat CSV(cm / 外旋 XYZ 欧拉角 / 31 列含 head / `_dof` 别名)
+- **结果**: PASS
+  - 与官方 `load_a3_flat_csv` 对比(在 sonic venv 内直接执行官方函数):
+    `root_pos`/`dof29` 误差 < 1e-12,四元数夹角 < 4e-6°(CSV 只有 ~9 位有效数字)
+  - 56 帧官方 sample CSV 的 load → write → load 数值一致
+- **已知问题**: 无
+- **下一阶段**: M3 / M4
+
+

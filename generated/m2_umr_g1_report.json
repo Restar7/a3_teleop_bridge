@@ -1,0 +1,277 @@
+{
+  "path": "../UMR/output/unitree_g1_retarget/dance1_subject2_smplx_unitree_g1.npz",
+  "qpos_shape": [
+    3945,
+    36
+  ],
+  "n_frames": 3945,
+  "nq": 36,
+  "fps": 30.0,
+  "dt": 0.03333333333333333,
+  "duration_s": 131.5,
+  "robot_name": "unitree_g1",
+  "robot_xml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/assets/g1/dance1_subject2_smplx_unitree_g1.floating_mjcf.xml",
+  "source_sequence_key": "dance1_subject2",
+  "source_format": "smplx_npz",
+  "smpl_scale": 0.7153690457344055,
+  "ground_z": 0.0,
+  "nan_count": 0,
+  "frame_ids": {
+    "first": 0,
+    "last": 3944,
+    "monotonic": true
+  },
+  "root": {
+    "representation": "free joint: qpos[0:3] = xyz (m), qpos[3:7] = quaternion (w, x, y, z)",
+    "position_min": [
+      -2.284707546234131,
+      -4.413861274719238,
+      0.4540625512599945
+    ],
+    "position_max": [
+      2.0985543727874756,
+      -1.154573917388916,
+      0.9138952493667603
+    ],
+    "height_mean_m": 0.7463430024296309,
+    "quat_norm_min": 0.9999999601227139,
+    "quat_norm_max": 1.0000000399606634
+  },
+  "joint_count": 29,
+  "joint_names": [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint"
+  ],
+  "joint_ranges": {
+    "left_hip_pitch_joint": {
+      "min": -1.847538709640503,
+      "max": 0.5230269432067871,
+      "mean": -0.4534268253213382,
+      "qpos_addr": 7,
+      "nonfinite": 0
+    },
+    "left_hip_roll_joint": {
+      "min": -0.48539552092552185,
+      "max": 0.9819961786270142,
+      "mean": 0.12446500417781828,
+      "qpos_addr": 8,
+      "nonfinite": 0
+    },
+    "left_hip_yaw_joint": {
+      "min": -0.49300500750541687,
+      "max": 1.006109595298767,
+      "mean": 0.1787255775434612,
+      "qpos_addr": 9,
+      "nonfinite": 0
+    },
+    "left_knee_joint": {
+      "min": 0.11536739021539688,
+      "max": 2.1977741718292236,
+      "mean": 0.8193972756351959,
+      "qpos_addr": 10,
+      "nonfinite": 0
+    },
+    "left_ankle_pitch_joint": {
+      "min": -0.8695393204689026,
+      "max": 0.5235999822616577,
+      "mean": -0.17486381460840966,
+      "qpos_addr": 11,
+      "nonfinite": 0
+    },
+    "left_ankle_roll_joint": {
+      "min": -0.26179999113082886,
+      "max": 0.26179999113082886,
+      "mean": -0.03798447629680563,
+      "qpos_addr": 12,
+      "nonfinite": 0
+    },
+    "right_hip_pitch_joint": {
+      "min": -1.3561623096466064,
+      "max": 0.185341477394104,
+      "mean": -0.4314451936613361,
+      "qpos_addr": 13,
+      "nonfinite": 0
+    },
+    "right_hip_roll_joint": {
+      "min": -1.3050270080566406,
+      "max": 0.36008182168006897,
+      "mean": -0.13111167512468408,
+      "qpos_addr": 14,
+      "nonfinite": 0
+    },
+    "right_hip_yaw_joint": {
+      "min": -1.0339595079421997,
+      "max": 0.49912551045417786,
+      "mean": -0.17015204732209657,
+      "qpos_addr": 15,
+      "nonfinite": 0
+    },
+    "right_knee_joint": {
+      "min": 0.15660762786865234,
+      "max": 2.3888967037200928,
+      "mean": 0.8706222429512722,
+      "qpos_addr": 16,
+      "nonfinite": 0
+    },
+    "right_ankle_pitch_joint": {
+      "min": -0.8726699948310852,
+      "max": 0.4011683166027069,
+      "mean": -0.27372720730085226,
+      "qpos_addr": 17,
+      "nonfinite": 0
+    },
+    "right_ankle_roll_joint": {
+      "min": -0.26179999113082886,
+      "max": 0.26179999113082886,
+      "mean": 0.008145357623600108,
+      "qpos_addr": 18,
+      "nonfinite": 0
+    },
+    "waist_yaw_joint": {
+      "min": -0.7376912236213684,
+      "max": 0.6370846033096313,
+      "mean": -0.030059286021900524,
+      "qpos_addr": 19,
+      "nonfinite": 0
+    },
+    "waist_roll_joint": {
+      "min": -0.5199999809265137,
+      "max": 0.5199999809265137,
+      "mean": 0.005644693680501399,
+      "qpos_addr": 20,
+      "nonfinite": 0
+    },
+    "waist_pitch_joint": {
+      "min": -0.5199999809265137,
+      "max": 0.5199999809265137,
+      "mean": 0.20410572029126417,
+      "qpos_addr": 21,
+      "nonfinite": 0
+    },
+    "left_shoulder_pitch_joint": {
+      "min": -1.6436818838119507,
+      "max": 1.1946470737457275,
+      "mean": -0.06134790662750681,
+      "qpos_addr": 22,
+      "nonfinite": 0
+    },
+    "left_shoulder_roll_joint": {
+      "min": -0.17138351500034332,
+      "max": 2.251499891281128,
+      "mean": 0.7081956391341403,
+      "qpos_addr": 23,
+      "nonfinite": 0
+    },
+    "left_shoulder_yaw_joint": {
+      "min": -1.8912025690078735,
+      "max": 1.1610510349273682,
+      "mean": -0.2690566694709546,
+      "qpos_addr": 24,
+      "nonfinite": 0
+    },
+    "left_elbow_joint": {
+      "min": -1.0173232555389404,
+      "max": 1.2797369956970215,
+      "mean": 0.07734692136158622,
+      "qpos_addr": 25,
+      "nonfinite": 0
+    },
+    "left_wrist_roll_joint": {
+      "min": -0.3855796754360199,
+      "max": 0.8421159386634827,
+      "mean": 0.2683679050344498,
+      "qpos_addr": 26,
+      "nonfinite": 0
+    },
+    "left_wrist_pitch_joint": {
+      "min": -0.30000001192092896,
+      "max": 0.6475909352302551,
+      "mean": 0.004769687081564097,
+      "qpos_addr": 27,
+      "nonfinite": 0
+    },
+    "left_wrist_yaw_joint": {
+      "min": -0.6922314763069153,
+      "max": 0.9044923186302185,
+      "mean": 0.2030869338511043,
+      "qpos_addr": 28,
+      "nonfinite": 0
+    },
+    "right_shoulder_pitch_joint": {
+      "min": -1.5437654256820679,
+      "max": 0.7664431929588318,
+      "mean": -0.02884717824314373,
+      "qpos_addr": 29,
+      "nonfinite": 0
+    },
+    "right_shoulder_roll_joint": {
+      "min": -2.251499891281128,
+      "max": 0.0379723459482193,
+      "mean": -0.7822998463447679,
+      "qpos_addr": 30,
+      "nonfinite": 0
+    },
+    "right_shoulder_yaw_joint": {
+      "min": -1.957533597946167,
+      "max": 1.51289963722229,
+      "mean": -0.0883874232852442,
+      "qpos_addr": 31,
+      "nonfinite": 0
+    },
+    "right_elbow_joint": {
+      "min": -0.93714439868927,
+      "max": 1.1905356645584106,
+      "mean": 0.08613004374968475,
+      "qpos_addr": 32,
+      "nonfinite": 0
+    },
+    "right_wrist_roll_joint": {
+      "min": -0.9017512202262878,
+      "max": 0.7060717940330505,
+      "mean": -0.1679555085042659,
+      "qpos_addr": 33,
+      "nonfinite": 0
+    },
+    "right_wrist_pitch_joint": {
+      "min": -0.30000001192092896,
+      "max": 0.39127063751220703,
+      "mean": -0.03272770723766378,
+      "qpos_addr": 34,
+      "nonfinite": 0
+    },
+    "right_wrist_yaw_joint": {
+      "min": -1.1208299398422241,
+      "max": 0.7142950892448425,
+      "mean": -0.30023529945830085,
+      "qpos_addr": 35,
+      "nonfinite": 0
+    }
+  }
+}
