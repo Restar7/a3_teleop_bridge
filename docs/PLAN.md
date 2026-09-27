@@ -54,8 +54,8 @@
 
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| 09 | `pico/zmq_subscriber.py` | 订阅 SONIC ZMQ,校验 (24,3)/(21,3),统计丢帧 | ⏸ |
-| 10 | `pico/recorder.py` + `apps/record_pico.py` | 录制 npz + metadata + stats | ⏸ |
+| 09 | `pico/zmq_subscriber.py` | 订阅 SONIC ZMQ,校验 (24,3)/(21,3),统计丢帧 | ✅ 9 tests;M5/M7 链路在用 |
+| 10 | `pico/recorder.py` + `apps/record_pico.py` | 录制 npz + metadata + stats | ✅ 5 tests;`recordings/m5_*` 即其产物 |
 | 11 | `umr/source_adapter.py` + root orientation 策略 | 四元数连续性、hip+shoulder 朝向社会 | ✅ 8 tests |
 | 12 | **M5**:recorded PICO → UMR → A3 → MuJoCo | 离线全链路复现 | ✅ 4/4 PASS |
 
@@ -64,8 +64,8 @@
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
 | 13 | `OnlineUMRRetargeter`(correspondence 只初始化一次 + warm start) | 单帧 step 无重复建图;记录 iterations/ms/cost | ✅ `92dee36` 装配完成;prepare 15.5 ms + solve 34.3 ms = 20 Hz |
-| 14 | `a3/predictor.py`(One Euro + 常速外推 + 四元数指数映射) | 静止/匀速/限幅 3 组单测 | ⏸ |
-| 15 | `transport/protocol.py` `A3_REFERENCE_V1` + publisher/subscriber | msgpack 二进制,latest-only,roundtrip 单测 | ⏸ |
+| 14 | `a3/predictor.py`(One Euro + 常速外推 + 四元数指数映射) | 静止/匀速/限幅 3 组单测 | ✅ 16 tests(含静止/匀速/限幅);实时链路在用 |
+| 15 | `transport/protocol.py` `A3_REFERENCE_V1` + publisher/subscriber | msgpack 二进制,latest-only,roundtrip 单测 | ✅ 13 tests;encode/decode 0.052/0.094 ms;C++ 端 16 项对拍通过 |
 | 16 | `apps/replay_reference.py` | 离线轨迹 50Hz 模拟发布 | ✅ 实测 50.0 Hz |
 | 17 | sonic_for_a3:`ReferenceProvider` 抽象(Csv/Streaming) | **回归测试**:新旧 obs 最大差 0.0 | ✅ 301d4f1 |
 | 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | ✅ 16000 步 / 265 s / fall=false / rejected=0 |
