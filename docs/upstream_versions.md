@@ -33,3 +33,23 @@ branch    = main (unmodified; PICO / XRoboToolkit stage only)
   contain them.
 - The pre-existing `GR00T-WholeBodyControl` clone was reused (per instruction
   "不需要重新 clone sonic"), so no second copy of that repo exists.
+
+## 本项目的 feature branch 提交(截至本次会话)
+
+```text
+sonic_for_a3  feat/a3-streaming-reference
+  301d4f1  ReferenceProvider 抽象(Csv / Streaming)
+  db3110e  joint-order 校验(il 顺序)
+  ef07aac  --realtime 发布
+  e9d3a11  C++ A3ReferenceStream + a3_reference_limits.hpp + 独立单测
+  2f244dc  streaming 统计输出
+  e735bba  参考推进上界 + nlerp 插值(每 tick 一个槽位)
+
+UMR  feat/a3-online-retarget
+  91895f3  env var 路径展开 + A3 robot config
+  d892361  嵌套相对 mesh 路径按 meshdir 解析
+  9341764  膝关节下界裁到 0(禁止反折)
+```
+
+上游 main/master 未被修改;`sonic_for_a3` 只做 §16 允许的最小 streaming 接口改动,
+`UMR` 只暴露 online 装配所需的公开函数(未重写算法)。
