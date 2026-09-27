@@ -1,0 +1,807 @@
+schema: a3_joint_limits/v1
+generated_by: tools/extract_a3_joint_limits.py
+sources:
+  mjcf: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml
+  urdf: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf
+  policy_parameters: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/a3_policy_parameters.hpp
+policy_joint_order:
+- waist_yaw_joint
+- waist_roll_joint
+- waist_pitch_joint
+- left_shoulder_pitch_joint
+- left_shoulder_roll_joint
+- left_shoulder_yaw_joint
+- left_elbow_joint
+- left_wrist_roll_joint
+- left_wrist_pitch_joint
+- left_wrist_yaw_joint
+- right_shoulder_pitch_joint
+- right_shoulder_roll_joint
+- right_shoulder_yaw_joint
+- right_elbow_joint
+- right_wrist_roll_joint
+- right_wrist_pitch_joint
+- right_wrist_yaw_joint
+- left_hip_pitch_joint
+- left_hip_roll_joint
+- left_hip_yaw_joint
+- left_knee_joint
+- left_ankle_pitch_joint
+- left_ankle_roll_joint
+- right_hip_pitch_joint
+- right_hip_roll_joint
+- right_hip_yaw_joint
+- right_knee_joint
+- right_ankle_pitch_joint
+- right_ankle_roll_joint
+joint_count: 29
+joints:
+  waist_yaw_joint:
+    index: 0
+    csv_index: 0
+    type: hinge
+    position_lower: -2.6179938779914944
+    position_upper: 2.6179938779914944
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: 0.0
+    kp: 85.0
+    kd: 3.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.6470588235294118
+  waist_roll_joint:
+    index: 1
+    csv_index: 1
+    type: hinge
+    position_lower: -0.3490658503988659
+    position_upper: 0.3490658503988659
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 22.7
+    effort_limit: 46.0
+    actuator_force_range: null
+    default_angle: 0.0
+    kp: 50.0
+    kd: 2.0
+    damping: 0.1
+    frictionloss: 0.69223
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.23
+  waist_pitch_joint:
+    index: 2
+    csv_index: 2
+    type: hinge
+    position_lower: -0.4886921905584123
+    position_upper: 0.4188790204786391
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 9.24785
+    effort_limit: 118.0
+    actuator_force_range: null
+    default_angle: 0.0
+    kp: 50.0
+    kd: 2.0
+    damping: 0.1
+    frictionloss: 1.7
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.575
+  left_shoulder_pitch_joint:
+    index: 3
+    csv_index: 5
+    type: hinge
+    position_lower: -2.8797932657906435
+    position_upper: 2.8797932657906435
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 13.613568165555769
+    effort_limit: 60.0
+    actuator_force_range:
+    - -60.0
+    - 60.0
+    default_angle: 0.3
+    kp: 40.0
+    kd: 3.0
+    damping: 1.5
+    frictionloss: 0.6293
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.375
+  left_shoulder_roll_joint:
+    index: 4
+    csv_index: 6
+    type: hinge
+    position_lower: -0.08726646259971647
+    position_upper: 2.6179938779914944
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 13.613568165555769
+    effort_limit: 60.0
+    actuator_force_range:
+    - -60.0
+    - 60.0
+    default_angle: 0.12
+    kp: 40.0
+    kd: 3.0
+    damping: 1.5
+    frictionloss: 0.6293
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.375
+  left_shoulder_yaw_joint:
+    index: 5
+    csv_index: 7
+    type: hinge
+    position_lower: -2.792526803190927
+    position_upper: 2.792526803190927
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.0
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.2
+  left_elbow_joint:
+    index: 6
+    csv_index: 8
+    type: hinge
+    position_lower: -0.9599310885968813
+    position_upper: 1.7453292519943295
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.8
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.2
+  left_wrist_roll_joint:
+    index: 7
+    csv_index: 9
+    type: hinge
+    position_lower: -2.792526803190927
+    position_upper: 2.792526803190927
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.0
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.2
+  left_wrist_pitch_joint:
+    index: 8
+    csv_index: 10
+    type: hinge
+    position_lower: -1.6231562043547265
+    position_upper: 1.6231562043547265
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.775810124598491
+    effort_limit: 6.0
+    actuator_force_range:
+    - -6.0
+    - 6.0
+    default_angle: 0.0
+    kp: 20.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.1
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.075
+  left_wrist_yaw_joint:
+    index: 9
+    csv_index: 11
+    type: hinge
+    position_lower: -1.6231562043547265
+    position_upper: 1.6231562043547265
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.775810124598491
+    effort_limit: 6.0
+    actuator_force_range:
+    - -6.0
+    - 6.0
+    default_angle: 0.0
+    kp: 20.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.1
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.075
+  right_shoulder_pitch_joint:
+    index: 10
+    csv_index: 12
+    type: hinge
+    position_lower: -2.8797932657906404
+    position_upper: 2.8797932657906435
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 13.613568165555769
+    effort_limit: 60.0
+    actuator_force_range:
+    - -60.0
+    - 60.0
+    default_angle: 0.3
+    kp: 40.0
+    kd: 3.0
+    damping: 1.5
+    frictionloss: 0.6293
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.375
+  right_shoulder_roll_joint:
+    index: 11
+    csv_index: 13
+    type: hinge
+    position_lower: -2.6179938779914944
+    position_upper: 0.08726646259971647
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 13.613568165555769
+    effort_limit: 60.0
+    actuator_force_range:
+    - -60.0
+    - 60.0
+    default_angle: -0.12
+    kp: 40.0
+    kd: 3.0
+    damping: 1.5
+    frictionloss: 0.6293
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.375
+  right_shoulder_yaw_joint:
+    index: 12
+    csv_index: 14
+    type: hinge
+    position_lower: -2.792526803190927
+    position_upper: 2.792526803190927
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.0
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.2
+  right_elbow_joint:
+    index: 13
+    csv_index: 15
+    type: hinge
+    position_lower: -0.9599310885968813
+    position_upper: 1.7453292519943295
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.8
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.2
+  right_wrist_roll_joint:
+    index: 14
+    csv_index: 16
+    type: hinge
+    position_lower: -2.792526803190927
+    position_upper: 2.792526803190927
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 15.707963267948966
+    effort_limit: 24.0
+    actuator_force_range:
+    - -24.0
+    - 24.0
+    default_angle: 0.0
+    kp: 30.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.41197
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.2
+  right_wrist_pitch_joint:
+    index: 15
+    csv_index: 17
+    type: hinge
+    position_lower: -1.6231562043547265
+    position_upper: 1.6231562043547265
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.775810124598491
+    effort_limit: 6.0
+    actuator_force_range:
+    - -6.0
+    - 6.0
+    default_angle: 0.0
+    kp: 20.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.1
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.075
+  right_wrist_yaw_joint:
+    index: 16
+    csv_index: 18
+    type: hinge
+    position_lower: -1.6231562043547265
+    position_upper: 1.6231562043547265
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.775810124598491
+    effort_limit: 6.0
+    actuator_force_range:
+    - -6.0
+    - 6.0
+    default_angle: 0.0
+    kp: 20.0
+    kd: 2.0
+    damping: 1.0
+    frictionloss: 0.1
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.075
+  left_hip_pitch_joint:
+    index: 17
+    csv_index: 19
+    type: hinge
+    position_lower: -2.5132741228718345
+    position_upper: 2.9321531433504737
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: -0.1311
+    kp: 80.0
+    kd: 3.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.6875
+  left_hip_roll_joint:
+    index: 18
+    csv_index: 20
+    type: hinge
+    position_lower: -0.5235987755982988
+    position_upper: 1.6057029118347832
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: 0.0056
+    kp: 120.0
+    kd: 4.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.4583333333333333
+  left_hip_yaw_joint:
+    index: 19
+    csv_index: 21
+    type: hinge
+    position_lower: -2.722713633111154
+    position_upper: 2.722713633111154
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: -0.0348
+    kp: 80.0
+    kd: 3.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.6875
+  left_knee_joint:
+    index: 20
+    csv_index: 22
+    type: hinge
+    position_lower: -0.12217304763960307
+    position_upper: 2.4958208303518914
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 14.660765716752367
+    effort_limit: 320.0
+    actuator_force_range:
+    - -320.0
+    - 320.0
+    default_angle: 0.2468
+    kp: 250.0
+    kd: 8.0
+    damping: 2.0
+    frictionloss: 2.4276
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.32
+  left_ankle_pitch_joint:
+    index: 21
+    csv_index: 23
+    type: hinge
+    position_lower: -0.9075712110370514
+    position_upper: 0.5235987755982988
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 10.8
+    effort_limit: 118.2
+    actuator_force_range: null
+    default_angle: -0.1204
+    kp: 50.0
+    kd: 2.0
+    damping: 0.45
+    frictionloss: 1.4
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.591
+  left_ankle_roll_joint:
+    index: 22
+    csv_index: 24
+    type: hinge
+    position_lower: -0.3490658503988659
+    position_upper: 0.3490658503988659
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 19.37
+    effort_limit: 54.75
+    actuator_force_range: null
+    default_angle: -0.0078
+    kp: 50.0
+    kd: 2.0
+    damping: 0.45
+    frictionloss: 0.778
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.27375
+  right_hip_pitch_joint:
+    index: 23
+    csv_index: 25
+    type: hinge
+    position_lower: -2.5132741228718345
+    position_upper: 2.9321531433504737
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: -0.1311
+    kp: 80.0
+    kd: 3.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.6875
+  right_hip_roll_joint:
+    index: 24
+    csv_index: 26
+    type: hinge
+    position_lower: -1.6057029118347832
+    position_upper: 0.5235987755982988
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: -0.0056
+    kp: 120.0
+    kd: 4.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.4583333333333333
+  right_hip_yaw_joint:
+    index: 25
+    csv_index: 27
+    type: hinge
+    position_lower: -2.722713633111154
+    position_upper: 2.722713633111154
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 12.042771838760874
+    effort_limit: 220.0
+    actuator_force_range:
+    - -220.0
+    - 220.0
+    default_angle: 0.0348
+    kp: 80.0
+    kd: 3.0
+    damping: 1.0
+    frictionloss: 1.1971
+    armature: null
+    axis:
+    - 0.0
+    - 0.0
+    - 1.0
+    action_scale: 0.6875
+  right_knee_joint:
+    index: 26
+    csv_index: 28
+    type: hinge
+    position_lower: -0.12217304763960307
+    position_upper: 2.4958208303518914
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 14.660765716752367
+    effort_limit: 320.0
+    actuator_force_range:
+    - -320.0
+    - 320.0
+    default_angle: 0.2468
+    kp: 250.0
+    kd: 8.0
+    damping: 2.0
+    frictionloss: 2.4276
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.32
+  right_ankle_pitch_joint:
+    index: 27
+    csv_index: 29
+    type: hinge
+    position_lower: -0.9075712110370514
+    position_upper: 0.5235987755982988
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 10.8
+    effort_limit: 118.2
+    actuator_force_range: null
+    default_angle: -0.1204
+    kp: 50.0
+    kd: 2.0
+    damping: 0.45
+    frictionloss: 1.4
+    armature: null
+    axis:
+    - 0.0
+    - 1.0
+    - 0.0
+    action_scale: 0.591
+  right_ankle_roll_joint:
+    index: 28
+    csv_index: 30
+    type: hinge
+    position_lower: -0.3490658503988659
+    position_upper: 0.3490658503988659
+    position_limit_source:
+    - mjcf
+    - urdf
+    velocity_limit: 19.37
+    effort_limit: 54.75
+    actuator_force_range: null
+    default_angle: 0.0078
+    kp: 50.0
+    kd: 2.0
+    damping: 0.45
+    frictionloss: 0.778
+    armature: null
+    axis:
+    - 1.0
+    - 0.0
+    - 0.0
+    action_scale: 0.27375
+excluded_joints:
+  head_yaw_joint:
+    mjcf_type: hinge
+    position_range:
+    - 0.0
+    - 0.0
+    damping: 1.0
+    stiffness: null
+    armature: null
+    in_policy_view: false
+  head_pitch_joint:
+    mjcf_type: hinge
+    position_range:
+    - 0.0
+    - 0.0
+    damping: 1.0
+    stiffness: null
+    armature: null
+    in_policy_view: false
+  left_foot_forefoot_joint:
+    mjcf_type: hinge
+    position_range:
+    - -0.06606093
+    - 0.06606093
+    damping: 1.51683722
+    stiffness: 2396.666
+    armature: 0.0001
+    in_policy_view: false
+  left_foot_toe_joint:
+    mjcf_type: hinge
+    position_range:
+    - -0.2305825
+    - 0.2305825
+    damping: 0.0686125693
+    stiffness: 27.58407
+    armature: 3.0e-05
+    in_policy_view: false
+  right_foot_forefoot_joint:
+    mjcf_type: hinge
+    position_range:
+    - -0.06606093
+    - 0.06606093
+    damping: 1.51683722
+    stiffness: 2396.666
+    armature: 0.0001
+    in_policy_view: false
+  right_foot_toe_joint:
+    mjcf_type: hinge
+    position_range:
+    - -0.2305825
+    - 0.2305825
+    damping: 0.0686125693
+    stiffness: 27.58407
+    armature: 3.0e-05
+    in_policy_view: false
+warnings: []
