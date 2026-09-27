@@ -369,9 +369,16 @@
       关节名;解码端校验并逆置换
     - SONIC 侧 provider 拒绝未打标签的包
   - `replay_reference.py` 实测稳定 **50.0 Hz**(500 帧 / 10 s)
-- **已知问题**:
-  - `--batch-once` 下 MuJoCo 循环不受实时时钟约束(约 1.5× 实时),因此部分 policy step
-    会复用同一个最新窗口;这不影响稳定性验收,但 M7(实时 PICO)需要真实时基。
+- **已知问题(耐久测试中定位到的三个问题)**:
+  1. `--batch-once` 下 MuJoCo 循环不受实时时钟约束(约 2.5× 实时),窗口会被复用 →
+     SONIC 侧新增 `--realtime`,批量模式也按墙钟节拍。
+  2. `replay_reference` 循环播放时重置 predictor:seq 归零(违反单调性)且会发出
+     默认姿态占位窗口 → 现在**不重置**、并且不发布 DISCONNECTED 窗口。
+     另外回放原来按发布频率推进(30 fps 素材被 1.67× 加速)→ 现在按 source 时间推进。
+  3. 直接把 9 段动作首尾相接会造出参考姿态跳变,policy 会在跳变处摔倒
+     —— 跳变参考本身就是故障输入。耐久必须用**连续**轨迹:
+     `tools/make_endurance_clip.py` 对相邻 clip 做 20 帧 cross-fade
+     (最大关节步进 0.087 rad、root 步进 0.0014 m),然后重复 8 次 = 240 s。
 - **下一阶段**: commit 19(实时 PICO → UMR online → MuJoCo,需要 PICO 硬件)、
   commit 20/21(benchmark / 故障注入)
 

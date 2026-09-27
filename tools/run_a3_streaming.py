@@ -41,6 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--no-publisher", action="store_true", help="use an already running publisher")
     parser.add_argument(
+        "--smooth",
+        action="store_true",
+        help="use logs/a3_validation/endurance_loop.csv (cross-faded, continuous). "
+        "A concatenated reference with pose jumps is a fault input, not an "
+        "endurance input -- the policy is expected to fall on reference teleports.",
+    )
+    parser.add_argument(
         "--free-run",
         action="store_true",
         help="do not pace the policy loop (default: --realtime, so the streamed "
@@ -134,8 +141,20 @@ def main(argv: list[str] | None = None) -> int:
         problems.append(f"fall at tick {metrics.get('fall_tick')}")
     if "rejected=0" not in pub_text:
         problems.append("publisher reported rejected frames")
-    if "Traceback" in pub_text:
+    # a KeyboardInterrupt traceback is how the harness stops the publisher; any
+    # other exception is a real failure
+    fatal = [
+        line
+        for line in pub_text.splitlines()
+        if line.startswith(("zmq.error", "Traceback", "ValueError", "RuntimeError", "FileNotFoundError"))
+    ]
+    interrupt_only = all(
+        "KeyboardInterrupt" in pub_text or "replay] interrupted" in pub_text for _ in fatal
+    )
+    if fatal and not interrupt_only:
         problems.append("publisher raised an exception")
+    if "Address already in use" in pub_text:
+        problems.append("publisher could not bind its port (a stale publisher is running?)")
     if not metrics:
         problems.append("no metrics produced")
 
