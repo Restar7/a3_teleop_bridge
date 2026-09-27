@@ -173,7 +173,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[live] loaded calibration {args.calibration}")
 
     # ---- automatic session calibration (plan section 74) -----------------
-    if args.auto_calibrate and args.source == "trajectory" and recording is not None:
+    # Both live-capable sources are covered: a recorded PICO session carries a
+    # real body, and the CSV stand-in is rejected by the body_present check below
+    # (previously only "trajectory" was wired, so an online-UMR run driven by a
+    # recording could never leave the CALIBRATION state).
+    if args.auto_calibrate and args.source in ("trajectory", "recording") and recording is not None:
         sample = recording.frames[: max(30, int(1.0 * args.playback_hz))]
         body_present = bool(
             sample and np.abs(np.asarray([f.smpl_joints for f in sample])).max() > 1e-3

@@ -161,7 +161,14 @@ def main(argv: list[str] | None = None) -> int:
         "problems": problems,
     }
     (out_dir / "live_chain_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"[live-chain] returncode={proc.returncode} elapsed={elapsed:.1f}s steps={args.policy_steps}")
+    # report the steps the sim *actually* executed: the metrics file is written by
+    # the policy loop, so a motion CSV that runs out early shows up here instead
+    # of being masked by the requested --policy-steps
+    executed = metrics.get("num_policy_steps")
+    print(
+        f"[live-chain] returncode={proc.returncode} elapsed={elapsed:.1f}s "
+        f"steps={executed} (requested {args.policy_steps})"
+    )
     print(f"[live-chain] fall={metrics.get('fall')} root_z={(metrics.get('root_height') or {}).get('mean')}")
     print(f"[live-chain] states={stats.get('state_history')} published={stats.get('frames_published')}")
     print(f"[live-chain] solver p50={((stats.get('solver_latency_ms') or {}).get('p50'))} ms, "
