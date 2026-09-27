@@ -1,0 +1,285 @@
+{
+  "stage": "M1",
+  "tag": "full",
+  "command": [
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/.venv_sim/bin/python",
+    "gear_sonic/scripts/sim2sim_a3_mujoco.py",
+    "--checkpoint",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "--motion",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+    "--encoder-mode",
+    "a3_fast",
+    "--mjcf",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+    "--batch-once",
+    "--metrics-out",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_metrics.json",
+    "--timeseries-out",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_timeseries.json"
+  ],
+  "cwd": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3",
+  "elapsed_s": 25.078930616378784,
+  "returncode": 0,
+  "checkpoint": {
+    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "sha256": "9cf33be2f4e602858b68ce31d5824113ab1dda250acaab5842b6d3bf88b70f2d",
+    "sha256_matches_release": true,
+    "config_yaml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/config.yaml"
+  },
+  "mjcf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+  "urdf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf",
+  "motion": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+  "encoder_mode": "a3_fast",
+  "policy_hz": 50.0,
+  "policy_dt": 0.02,
+  "reference_window": {
+    "frames": 10,
+    "dt": 0.02,
+    "future_horizon_s": 0.18,
+    "frame_skip": 1
+  },
+  "shapes": {
+    "policy_joints": 29,
+    "encoder_input_dim": 640,
+    "encoder_frame_dim": 64,
+    "observation_dim": 1570,
+    "action_dim": 29
+  },
+  "metrics": {
+    "action": {
+      "q_des_step_abs_max": 0.25649471354484554,
+      "q_des_step_rms": 0.01738708869281532,
+      "raw_abs_max": 6.2331953048706055,
+      "raw_rms": 1.6195675286216575
+    },
+    "anchor_pose": {
+      "body_name": "pelvis_link",
+      "orientation_max_deg": 6.952544018147139,
+      "orientation_mean_deg": 1.8094503503786141,
+      "position_max_m": 0.4830980794866946,
+      "position_mean_m": 0.17333849231490125,
+      "position_rmse_m": 0.2277760129301271
+    },
+    "fall": false,
+    "fall_heuristic": {
+      "abs_roll_or_pitch_above_deg": 60.0,
+      "root_height_below_m": 0.45
+    },
+    "fall_tick": null,
+    "fall_time_s": null,
+    "fps": 50.0,
+    "motion_name": "001_walk_front_slow.csv",
+    "motions": [
+      {
+        "action": {
+          "q_des_step_abs_max": 0.25649471354484554,
+          "q_des_step_rms": 0.01738708869281532,
+          "raw_abs_max": 6.2331953048706055,
+          "raw_rms": 1.6195675286216575
+        },
+        "anchor_pose": {
+          "body_name": "pelvis_link",
+          "orientation_max_deg": 6.952544018147139,
+          "orientation_mean_deg": 1.8094503503786141,
+          "position_max_m": 0.4830980794866946,
+          "position_mean_m": 0.17333849231490125,
+          "position_rmse_m": 0.2277760129301271
+        },
+        "fall": false,
+        "fall_tick": null,
+        "fall_time_s": null,
+        "motion_name": "001_walk_front_slow.csv",
+        "num_policy_steps": 1652,
+        "root_height": {
+          "mean": 1.0518921514090485,
+          "min": 1.029411205770137
+        },
+        "root_pose": {
+          "orientation_max_deg": 6.952544018147139,
+          "orientation_mean_deg": 1.8094503503785706,
+          "position_max_m": 0.4830980794866946,
+          "position_mean_m": 0.17333849231490125,
+          "position_rmse_m": 0.2277760129301271
+        },
+        "root_roll_pitch_abs_max_deg": 9.6192312835858,
+        "tracking": {
+          "all_29_rmse": 0.0661726783332001,
+          "anchor_local_body_mpjpe": {
+            "max_error_mm": 118.88945192263188,
+            "median_mpjpe_mm": 4.747737471820026,
+            "mpjpe_m": 0.01075372850824936,
+            "mpjpe_mm": 10.75372850824936,
+            "p95_mpjpe_mm": 47.603160899844674
+          },
+          "anchor_local_body_mpjpe_by_group": {
+            "all_29": {
+              "max_error_mm": 118.88945192263188,
+              "median_mpjpe_mm": 4.747737471820026,
+              "mpjpe_m": 0.01075372850824936,
+              "mpjpe_mm": 10.75372850824936,
+              "p95_mpjpe_mm": 47.603160899844674
+            },
+            "arms": {
+              "max_error_mm": 118.88945192263188,
+              "median_mpjpe_mm": 7.546224129167551,
+              "mpjpe_m": 0.017323327363173234,
+              "mpjpe_mm": 17.323327363173235,
+              "p95_mpjpe_mm": 62.045625500493905
+            },
+            "legs": {
+              "max_error_mm": 26.07203062431183,
+              "median_mpjpe_mm": 3.4126448454791443,
+              "mpjpe_m": 0.004485985129938802,
+              "mpjpe_mm": 4.485985129938802,
+              "p95_mpjpe_mm": 13.696519098683266
+            },
+            "waist": {
+              "max_error_mm": 23.15502881072093,
+              "median_mpjpe_mm": 4.441329934323696,
+              "mpjpe_m": 0.00516657403184686,
+              "mpjpe_mm": 5.16657403184686,
+              "p95_mpjpe_mm": 14.886782738288487
+            }
+          },
+          "arms_rmse": 0.06190868746804343,
+          "global_body_mpjpe": {
+            "max_error_mm": 491.9539772143394,
+            "median_mpjpe_mm": 122.19034068121853,
+            "mpjpe_m": 0.1739091968463441,
+            "mpjpe_mm": 173.9091968463441,
+            "p95_mpjpe_mm": 477.79699727750364
+          },
+          "legs_rmse": 0.07799265987663442,
+          "mpjpe_g": {
+            "max_error_mm": 491.9539772143394,
+            "median_mpjpe_mm": 120.886095191276,
+            "mpjpe_m": 0.17379429232016338,
+            "mpjpe_mm": 173.79429232016338,
+            "p95_mpjpe_mm": 478.08828582607066
+          },
+          "mpjpe_l": {
+            "max_error_mm": 146.9666618504706,
+            "median_mpjpe_mm": 10.228684096194694,
+            "mpjpe_m": 0.015357144925917452,
+            "mpjpe_mm": 15.357144925917451,
+            "p95_mpjpe_mm": 50.69591118257057
+          },
+          "q_des_vs_ref": {
+            "all_29_rmse": 0.16209052416021566,
+            "arms_rmse": 0.06953115259851707,
+            "legs_rmse": 0.2259209750167202,
+            "waist_rmse": 0.1650850514935743
+          },
+          "q_state_vs_ref": {
+            "all_29_rmse": 0.0661726783332001,
+            "arms_rmse": 0.06190868746804343,
+            "legs_rmse": 0.07799265987663442,
+            "waist_rmse": 0.01055176547747774
+          },
+          "waist_rmse": 0.01055176547747774
+        }
+      }
+    ],
+    "num_policy_steps": 1652,
+    "root_height": {
+      "mean": 1.0518921514090485,
+      "min": 1.029411205770137
+    },
+    "root_pose": {
+      "orientation_max_deg": 6.952544018147139,
+      "orientation_mean_deg": 1.8094503503785706,
+      "position_max_m": 0.4830980794866946,
+      "position_mean_m": 0.17333849231490125,
+      "position_rmse_m": 0.2277760129301271
+    },
+    "root_roll_pitch_abs_max_deg": 9.6192312835858,
+    "schema_version": 1,
+    "tracking": {
+      "all_29_rmse": 0.0661726783332001,
+      "anchor_local_body_mpjpe": {
+        "max_error_mm": 118.88945192263188,
+        "median_mpjpe_mm": 4.747737471820026,
+        "mpjpe_m": 0.01075372850824936,
+        "mpjpe_mm": 10.75372850824936,
+        "p95_mpjpe_mm": 47.603160899844674
+      },
+      "anchor_local_body_mpjpe_by_group": {
+        "all_29": {
+          "max_error_mm": 118.88945192263188,
+          "median_mpjpe_mm": 4.747737471820026,
+          "mpjpe_m": 0.01075372850824936,
+          "mpjpe_mm": 10.75372850824936,
+          "p95_mpjpe_mm": 47.603160899844674
+        },
+        "arms": {
+          "max_error_mm": 118.88945192263188,
+          "median_mpjpe_mm": 7.546224129167551,
+          "mpjpe_m": 0.017323327363173234,
+          "mpjpe_mm": 17.323327363173235,
+          "p95_mpjpe_mm": 62.045625500493905
+        },
+        "legs": {
+          "max_error_mm": 26.07203062431183,
+          "median_mpjpe_mm": 3.4126448454791443,
+          "mpjpe_m": 0.004485985129938802,
+          "mpjpe_mm": 4.485985129938802,
+          "p95_mpjpe_mm": 13.696519098683266
+        },
+        "waist": {
+          "max_error_mm": 23.15502881072093,
+          "median_mpjpe_mm": 4.441329934323696,
+          "mpjpe_m": 0.00516657403184686,
+          "mpjpe_mm": 5.16657403184686,
+          "p95_mpjpe_mm": 14.886782738288487
+        }
+      },
+      "arms_rmse": 0.06190868746804343,
+      "global_body_mpjpe": {
+        "max_error_mm": 491.9539772143394,
+        "median_mpjpe_mm": 122.19034068121853,
+        "mpjpe_m": 0.1739091968463441,
+        "mpjpe_mm": 173.9091968463441,
+        "p95_mpjpe_mm": 477.79699727750364
+      },
+      "legs_rmse": 0.07799265987663442,
+      "mpjpe_g": {
+        "max_error_mm": 491.9539772143394,
+        "median_mpjpe_mm": 120.886095191276,
+        "mpjpe_m": 0.17379429232016338,
+        "mpjpe_mm": 173.79429232016338,
+        "p95_mpjpe_mm": 478.08828582607066
+      },
+      "mpjpe_l": {
+        "max_error_mm": 146.9666618504706,
+        "median_mpjpe_mm": 10.228684096194694,
+        "mpjpe_m": 0.015357144925917452,
+        "mpjpe_mm": 15.357144925917451,
+        "p95_mpjpe_mm": 50.69591118257057
+      },
+      "q_des_vs_ref": {
+        "all_29_rmse": 0.16209052416021566,
+        "arms_rmse": 0.06953115259851707,
+        "legs_rmse": 0.2259209750167202,
+        "waist_rmse": 0.1650850514935743
+      },
+      "q_state_vs_ref": {
+        "all_29_rmse": 0.0661726783332001,
+        "arms_rmse": 0.06190868746804343,
+        "legs_rmse": 0.07799265987663442,
+        "waist_rmse": 0.01055176547747774
+      },
+      "waist_rmse": 0.01055176547747774
+    }
+  },
+  "timeseries": {
+    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_timeseries.json",
+    "samples": 1652,
+    "non_finite_frames": 0,
+    "q_min": -1.0683858239889144,
+    "q_max": 1.3927577018737793
+  },
+  "log": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_run.log",
+  "acceptable": true,
+  "problems": []
+}

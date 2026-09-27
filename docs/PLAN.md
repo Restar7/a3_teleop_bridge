@@ -32,15 +32,15 @@
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
 | 01 | workspace/bootstrap:目录、上游版本、计划、progress | 三个 repo SHA 落盘;分支建立 | ✅ |
-| 02 | `tools/inspect_a3_contract.py` → `generated/a3_contract.json` | 从**源码**提取 29 joints / dt=0.02 / 10 frames / obs 维度 并 assert | ⏸ |
-| — | **M1**:官方 A3-fast MuJoCo baseline | `logs/baseline/` 记录 checkpoint/MJCF/motion/Hz/输入输出 shape;无 NaN、不立即倒地 | ⏸ |
-| 03 | bridge 数据类型 `types.py` + `clocks.py` | 单测:shape/dtype/valid 语义 | ⏸ |
+| 02 | `tools/inspect_a3_contract.py` → `generated/a3_contract.json` | 从**源码**提取 29 joints / dt=0.02 / 10 frames / obs 维度 并 assert | ✅ |
+| — | **M1**:官方 A3-fast MuJoCo baseline | `logs/baseline/` 记录 checkpoint/MJCF/motion/Hz/输入输出 shape;无 NaN、不立即倒地 | ✅ 1652 步 / fall=false / 0 NaN |
+| 03 | bridge 数据类型 `types.py` + `clocks.py` + `a3/limits.py` | 单测:shape/dtype/valid 语义 | ✅ 46 tests |
 
 ### 阶段 B — UMR → A3 (TASK-002/003)
 
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| — | **M2**:UMR 官方 G1 baseline | `output/unitree_g1_retarget/*.npz` 存在,qpos/fps/robot_joint_names 正常 | ⏸ |
+| — | **M2**:UMR 官方 G1 baseline | `output/unitree_g1_retarget/*.npz` 存在,qpos/fps/robot_joint_names 正常 | 🔄 env 已就绪,待 SMPL-X 解包 |
 | 04 | `robot_configs/humanoid_retarget_agibot_a3.json` + env var 展开 | 使用 sonic_for_a3 的 035 MJCF | ⏸ |
 | 05 | `configs/a3_joint_map.yaml`(名称映射,禁止 index 假设) | assert 29 唯一 joint,head/passive 不在 policy | ⏸ |
 | 06 | `umr/state_converter.py` → `A3CanonicalState` | 名称映射 + clamp + 有限差分速度;dt 异常置 invalid | ⏸ |

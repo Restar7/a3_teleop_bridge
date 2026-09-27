@@ -1,0 +1,287 @@
+{
+  "stage": "M1",
+  "tag": "smoke",
+  "command": [
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/.venv_sim/bin/python",
+    "gear_sonic/scripts/sim2sim_a3_mujoco.py",
+    "--checkpoint",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "--motion",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+    "--encoder-mode",
+    "a3_fast",
+    "--mjcf",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+    "--batch-once",
+    "--metrics-out",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/smoke_metrics.json",
+    "--timeseries-out",
+    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/smoke_timeseries.json",
+    "--max-policy-steps",
+    "10"
+  ],
+  "cwd": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3",
+  "elapsed_s": 5.310008764266968,
+  "returncode": 0,
+  "checkpoint": {
+    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "sha256": "9cf33be2f4e602858b68ce31d5824113ab1dda250acaab5842b6d3bf88b70f2d",
+    "sha256_matches_release": true,
+    "config_yaml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/config.yaml"
+  },
+  "mjcf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+  "urdf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf",
+  "motion": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+  "encoder_mode": "a3_fast",
+  "policy_hz": 50.0,
+  "policy_dt": 0.02,
+  "reference_window": {
+    "frames": 10,
+    "dt": 0.02,
+    "future_horizon_s": 0.18,
+    "frame_skip": 1
+  },
+  "shapes": {
+    "policy_joints": 29,
+    "encoder_input_dim": 640,
+    "encoder_frame_dim": 64,
+    "observation_dim": 1570,
+    "action_dim": 29
+  },
+  "metrics": {
+    "action": {
+      "q_des_step_abs_max": 0.14299993515014647,
+      "q_des_step_rms": 0.03257502578436392,
+      "raw_abs_max": 3.424553394317627,
+      "raw_rms": 0.9858883111139789
+    },
+    "anchor_pose": {
+      "body_name": "pelvis_link",
+      "orientation_max_deg": 0.7456343628799759,
+      "orientation_mean_deg": 0.40283387240577245,
+      "position_max_m": 0.006793709489806857,
+      "position_mean_m": 0.005914802734550949,
+      "position_rmse_m": 0.005975830302719323
+    },
+    "fall": false,
+    "fall_heuristic": {
+      "abs_roll_or_pitch_above_deg": 60.0,
+      "root_height_below_m": 0.45
+    },
+    "fall_tick": null,
+    "fall_time_s": null,
+    "fps": 50.0,
+    "motion_name": "001_walk_front_slow.csv",
+    "motions": [
+      {
+        "action": {
+          "q_des_step_abs_max": 0.14299993515014647,
+          "q_des_step_rms": 0.03257502578436392,
+          "raw_abs_max": 3.424553394317627,
+          "raw_rms": 0.9858883111139789
+        },
+        "anchor_pose": {
+          "body_name": "pelvis_link",
+          "orientation_max_deg": 0.7456343628799759,
+          "orientation_mean_deg": 0.40283387240577245,
+          "position_max_m": 0.006793709489806857,
+          "position_mean_m": 0.005914802734550949,
+          "position_rmse_m": 0.005975830302719323
+        },
+        "fall": false,
+        "fall_tick": null,
+        "fall_time_s": null,
+        "motion_name": "001_walk_front_slow.csv",
+        "num_policy_steps": 10,
+        "root_height": {
+          "mean": 1.071196851658439,
+          "min": 1.0688601916596432
+        },
+        "root_pose": {
+          "orientation_max_deg": 0.7456343628780207,
+          "orientation_mean_deg": 0.40283387240620544,
+          "position_max_m": 0.006793709489806857,
+          "position_mean_m": 0.005914802734550949,
+          "position_rmse_m": 0.005975830302719323
+        },
+        "root_roll_pitch_abs_max_deg": 0.8771883482725409,
+        "tracking": {
+          "all_29_rmse": 0.05052122275684115,
+          "anchor_local_body_mpjpe": {
+            "max_error_mm": 13.64193872516557,
+            "median_mpjpe_mm": 2.6616564081597813,
+            "mpjpe_m": 0.0035781594955143193,
+            "mpjpe_mm": 3.578159495514319,
+            "p95_mpjpe_mm": 9.848574858745952
+          },
+          "anchor_local_body_mpjpe_by_group": {
+            "all_29": {
+              "max_error_mm": 13.64193872516557,
+              "median_mpjpe_mm": 2.6616564081597813,
+              "mpjpe_m": 0.0035781594955143193,
+              "mpjpe_mm": 3.578159495514319,
+              "p95_mpjpe_mm": 9.848574858745952
+            },
+            "arms": {
+              "max_error_mm": 12.215556804970362,
+              "median_mpjpe_mm": 3.3362991857859563,
+              "mpjpe_m": 0.00384877691066284,
+              "mpjpe_mm": 3.8487769106628402,
+              "p95_mpjpe_mm": 10.299159829566573
+            },
+            "legs": {
+              "max_error_mm": 13.64193872516557,
+              "median_mpjpe_mm": 1.9722109755399269,
+              "mpjpe_m": 0.003272188471584723,
+              "mpjpe_mm": 3.272188471584723,
+              "p95_mpjpe_mm": 9.908055062015945
+            },
+            "waist": {
+              "max_error_mm": 8.206160784253768,
+              "median_mpjpe_mm": 4.117178855485041,
+              "mpjpe_m": 0.003539162320539605,
+              "mpjpe_mm": 3.5391623205396052,
+              "p95_mpjpe_mm": 7.869536397211723
+            }
+          },
+          "arms_rmse": 0.0711844770464252,
+          "global_body_mpjpe": {
+            "max_error_mm": 15.284360760253971,
+            "median_mpjpe_mm": 6.92371565314281,
+            "mpjpe_m": 0.007711142109654332,
+            "mpjpe_mm": 7.711142109654332,
+            "p95_mpjpe_mm": 12.64967797503053
+          },
+          "legs_rmse": 0.015882624187499795,
+          "mpjpe_g": {
+            "max_error_mm": 15.284360760253971,
+            "median_mpjpe_mm": 6.913881511536505,
+            "mpjpe_m": 0.007943801363474938,
+            "mpjpe_mm": 7.943801363474938,
+            "p95_mpjpe_mm": 13.632223071291426
+          },
+          "mpjpe_l": {
+            "max_error_mm": 12.473888600108832,
+            "median_mpjpe_mm": 2.5922475345440947,
+            "mpjpe_m": 0.0037232514194740353,
+            "mpjpe_mm": 3.7232514194740354,
+            "p95_mpjpe_mm": 10.73434036717024
+          },
+          "q_des_vs_ref": {
+            "all_29_rmse": 0.12353633806965625,
+            "arms_rmse": 0.13934621552723223,
+            "legs_rmse": 0.10235141984601617,
+            "waist_rmse": 0.12250533486007864
+          },
+          "q_state_vs_ref": {
+            "all_29_rmse": 0.05052122275684115,
+            "arms_rmse": 0.0711844770464252,
+            "legs_rmse": 0.015882624187499795,
+            "waist_rmse": 0.004127739104553778
+          },
+          "waist_rmse": 0.004127739104553778
+        }
+      }
+    ],
+    "num_policy_steps": 10,
+    "root_height": {
+      "mean": 1.071196851658439,
+      "min": 1.0688601916596432
+    },
+    "root_pose": {
+      "orientation_max_deg": 0.7456343628780207,
+      "orientation_mean_deg": 0.40283387240620544,
+      "position_max_m": 0.006793709489806857,
+      "position_mean_m": 0.005914802734550949,
+      "position_rmse_m": 0.005975830302719323
+    },
+    "root_roll_pitch_abs_max_deg": 0.8771883482725409,
+    "schema_version": 1,
+    "tracking": {
+      "all_29_rmse": 0.05052122275684115,
+      "anchor_local_body_mpjpe": {
+        "max_error_mm": 13.64193872516557,
+        "median_mpjpe_mm": 2.6616564081597813,
+        "mpjpe_m": 0.0035781594955143193,
+        "mpjpe_mm": 3.578159495514319,
+        "p95_mpjpe_mm": 9.848574858745952
+      },
+      "anchor_local_body_mpjpe_by_group": {
+        "all_29": {
+          "max_error_mm": 13.64193872516557,
+          "median_mpjpe_mm": 2.6616564081597813,
+          "mpjpe_m": 0.0035781594955143193,
+          "mpjpe_mm": 3.578159495514319,
+          "p95_mpjpe_mm": 9.848574858745952
+        },
+        "arms": {
+          "max_error_mm": 12.215556804970362,
+          "median_mpjpe_mm": 3.3362991857859563,
+          "mpjpe_m": 0.00384877691066284,
+          "mpjpe_mm": 3.8487769106628402,
+          "p95_mpjpe_mm": 10.299159829566573
+        },
+        "legs": {
+          "max_error_mm": 13.64193872516557,
+          "median_mpjpe_mm": 1.9722109755399269,
+          "mpjpe_m": 0.003272188471584723,
+          "mpjpe_mm": 3.272188471584723,
+          "p95_mpjpe_mm": 9.908055062015945
+        },
+        "waist": {
+          "max_error_mm": 8.206160784253768,
+          "median_mpjpe_mm": 4.117178855485041,
+          "mpjpe_m": 0.003539162320539605,
+          "mpjpe_mm": 3.5391623205396052,
+          "p95_mpjpe_mm": 7.869536397211723
+        }
+      },
+      "arms_rmse": 0.0711844770464252,
+      "global_body_mpjpe": {
+        "max_error_mm": 15.284360760253971,
+        "median_mpjpe_mm": 6.92371565314281,
+        "mpjpe_m": 0.007711142109654332,
+        "mpjpe_mm": 7.711142109654332,
+        "p95_mpjpe_mm": 12.64967797503053
+      },
+      "legs_rmse": 0.015882624187499795,
+      "mpjpe_g": {
+        "max_error_mm": 15.284360760253971,
+        "median_mpjpe_mm": 6.913881511536505,
+        "mpjpe_m": 0.007943801363474938,
+        "mpjpe_mm": 7.943801363474938,
+        "p95_mpjpe_mm": 13.632223071291426
+      },
+      "mpjpe_l": {
+        "max_error_mm": 12.473888600108832,
+        "median_mpjpe_mm": 2.5922475345440947,
+        "mpjpe_m": 0.0037232514194740353,
+        "mpjpe_mm": 3.7232514194740354,
+        "p95_mpjpe_mm": 10.73434036717024
+      },
+      "q_des_vs_ref": {
+        "all_29_rmse": 0.12353633806965625,
+        "arms_rmse": 0.13934621552723223,
+        "legs_rmse": 0.10235141984601617,
+        "waist_rmse": 0.12250533486007864
+      },
+      "q_state_vs_ref": {
+        "all_29_rmse": 0.05052122275684115,
+        "arms_rmse": 0.0711844770464252,
+        "legs_rmse": 0.015882624187499795,
+        "waist_rmse": 0.004127739104553778
+      },
+      "waist_rmse": 0.004127739104553778
+    }
+  },
+  "timeseries": {
+    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/smoke_timeseries.json",
+    "samples": 10,
+    "non_finite_frames": 0,
+    "q_min": -0.50796537399292,
+    "q_max": 1.0577645778656006
+  },
+  "log": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/smoke_run.log",
+  "acceptable": true,
+  "problems": []
+}
