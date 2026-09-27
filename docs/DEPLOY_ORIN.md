@@ -4,7 +4,8 @@
 > **不接管电机**。A3 原装 RK3588 + RKNN + MDU + safety 全部沿用官方。
 > 本文所有命令都可直接复制;凡本机未实测的步骤都标注了 **[需 Orin 硬件]**。
 >
-> 相关文档:`A3_ONBOARD.md`(机载侧)、`docs/safety.md`、`docs/pico_setup.md`、`ORIN_BLOCKER.md`。
+> 相关文档:`A3_ONBOARD.md`(机载侧)、`DELIVERY.md`(交付物/仓库/**部署公钥**/推送命令)、
+> `docs/safety.md`、`docs/pico_setup.md`、`ORIN_BLOCKER.md`。
 
 ---
 
