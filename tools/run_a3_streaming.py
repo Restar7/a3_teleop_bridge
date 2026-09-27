@@ -40,6 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "m6_streaming"))
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--no-publisher", action="store_true", help="use an already running publisher")
+    parser.add_argument(
+        "--free-run",
+        action="store_true",
+        help="do not pace the policy loop (default: --realtime, so the streamed "
+        "reference and the policy clock stay aligned)",
+    )
     args = parser.parse_args(argv)
 
     contract = load_contract()
@@ -98,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
         "--timeseries-out",
         str(out_dir / "timeseries.json"),
     ]
+    if not args.free_run:
+        sim_cmd.append("--realtime")
     print("[m6] " + " ".join(sim_cmd))
     started = time.time()
     sim_log_path = out_dir / "sim2sim.log"
