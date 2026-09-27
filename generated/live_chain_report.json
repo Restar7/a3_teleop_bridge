@@ -1,0 +1,69 @@
+{
+  "csv": "../logs/a3_validation/endurance_loop.csv",
+  "endpoint": "tcp://127.0.0.1:15640",
+  "policy_steps": 3000,
+  "elapsed_s": 71.55944204330444,
+  "fall": false,
+  "root_height": {
+    "mean": 1.0714051799099316,
+    "min": 1.0420170609755035
+  },
+  "all_29_rmse": 0.14531816189515404,
+  "pipeline_stats": {
+    "frames_in": 3654,
+    "frames_solved": 3644,
+    "frames_published": 3642,
+    "rejected": 0,
+    "solver_latency_ms": {
+      "count": 3644,
+      "mean": 0.02305681137909906,
+      "p50": 0.02337247133255005,
+      "p90": 0.03264998085796833,
+      "p95": 0.035156961530447006,
+      "p99": 0.047285724431276335,
+      "max": 0.12980494648218155
+    },
+    "predictor_latency_ms": {
+      "count": 3642,
+      "mean": 0.6366455272854782,
+      "p50": 0.6106344517320395,
+      "p90": 0.8036247920244932,
+      "p95": 0.8164399536326528,
+      "p99": 0.8350145816802979,
+      "max": 6.835960783064365
+    },
+    "end_to_end_ms": {
+      "count": 3642,
+      "mean": 0.7080671405820977,
+      "p50": 0.679983,
+      "p90": 0.8689089999999999,
+      "p95": 0.8937476,
+      "p99": 0.9313173100000001,
+      "max": 20.549432
+    },
+    "state_history": [
+      "DISCONNECTED",
+      "CALIBRATION"
+    ],
+    "wall_s": 73.11538171768188,
+    "queue_dropped": {
+      "human": 10,
+      "state": 2
+    }
+  },
+  "stream_stats": {
+    "received": 2993,
+    "rejected": 0,
+    "dropped": 80,
+    "jumps": 4,
+    "max_jump_ms": 479.991762,
+    "interpolated": 2999,
+    "max_gap_ms": 821.385675,
+    "last_seq": 3394,
+    "last_reason": "",
+    "latency_p50_ms": 0.47908799999999996,
+    "latency_p95_ms": 0.59421075
+  },
+  "acceptable": true,
+  "problems": []
+}

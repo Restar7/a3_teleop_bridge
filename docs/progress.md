@@ -423,3 +423,50 @@
     retarget;M5 用 `tools/make_synthetic_pico_recording.py`(经官方 rest skeleton FK)。
   - 真实 PICO 头显录制(Mode B/D)尚未执行,需要硬件;链路与坐标约定已验证。
 - **下一阶段**: M7(实时 PICO,需硬件)、M9-M12(Orin / 真机)
+
+
+---
+
+## 阶段 13(part 1)/31/32/73/74/75 — 实时架构与标定(无硬件可验证部分)
+
+- **commit**: `1e3a2a2` + 本条的 live-chain 工具
+- **执行命令**:
+  ```bash
+  pytest tests/test_online_pipeline.py -q          # 13 项
+  python -m a3_teleop_bridge.apps.retarget_live --source trajectory \
+      --csv logs/a3_validation/endurance_loop.csv --duration 4
+  python tools/run_live_chain.py --csv logs/a3_validation/endurance_loop.csv \
+      --policy-steps 3000 --duration 90            # 实时架构全链路
+  ```
+- **输出**: `logs/live_chain/live_chain_report.json`、`generated/live_chain_report.json`
+- **结果**: **ACCEPTED**
+  ```text
+  policy steps   3000(墙面 71.6 s,≈ 42 Hz 有效)
+  fall           false
+  root z         mean 1.0714 m
+  published      3642 windows
+  solver p50     0.023 ms;end-to-end p95 0.89 ms
+  states         DISCONNECTED → CALIBRATION(未提供标定文件,故不进 TRACKING)
+  ```
+- **说明**:
+  - 进程/线程划分与方案 §31 一致:receiver → solver → predictor → publisher,
+    每一级 maxsize=1 的 latest-only 槽位(10k 次写入测试:dropped=9999,永不阻塞)。
+  - §32 时间戳:每级都有 source/receive/solve/publish 时间与分项延迟统计。
+  - §73 状态机由数据新鲜度驱动(测试覆盖 DISCONNECTED→CALIBRATION→TRACKING→HOLD→SAFE_STOP)。
+  - §74/§75 标定:root yaw offset / pelvis height offset / body scale / 左右自检,
+    可保存与加载;`apply_root` 只作用于 root pose(脚部运动仍由 UMR 约束处理)。
+  - 本机用 **recorded trajectory** 代替 PICO+UMR(replay backend),因此验证的是
+    Terminals C/D 的实时管线与网络;PICO 头显与 UMR online 求解仍是下一项。
+- **已知问题(commit 13 剩余部分)**:
+  - `UmrOnlineBackend` 的 **Stage I 装配**(`umr/umr_session.py::_prepare_geometry`)尚未实现,
+    当前会抛 `UmrSessionError` 并给出所需调用序列,不会假装可用。
+    已从 UMR 源码确认的装配顺序:
+    `prepare_robot_xml` → `mj_model/MjData` → `build_robot_self_penetration_cache` /
+    `build_ground_penetration_collision_cache` → `build_scalar_joint_limits` /
+    `build_dof_max_dq_box` → `scalar_qpos_joint_addrs` →
+    `source_template_vertices_joints_faces` → `load_slot_data`(robot/smpl) →
+    `center_source_template` → `shared_smplx_correspondence.transfer_slots` →
+    `bind_robot_slots` → `transport_tpose_robot_normals` → `bind_points_to_mesh`;
+    每帧则调用 `bind_source_slots_with_normals` + `solve_frame_body_segment_qp`
+    (warm start = 上一帧解)。
+- **下一阶段**: 完成 Stage I 装配 → M7(真实 PICO 或 recorded PICO 驱动 online UMR)

@@ -46,10 +46,20 @@ def make_frame_provider(args, recording=None):
     if args.source == "trajectory":
         if recording is None:
             raise SystemExit("--source trajectory needs --csv or --umr-result")
-        state = {"i": 0}
+        state = {"i": 0, "next_time": time.perf_counter()}
         frames = recording.frames
+        # replay at the recorded rate: an unthrottled producer would starve the
+        # solver thread with millions of frames/s and make freshness meaningless
+        period = 1.0 / max(args.playback_hz, 1e-6)
 
         def provider():
+            now = time.perf_counter()
+            if now < state["next_time"]:
+                time.sleep(min(0.005, state["next_time"] - now))
+                return None
+            state["next_time"] += period
+            if now - state["next_time"] > 0.25:  # fell behind: resynchronise
+                state["next_time"] = now + period
             if state["i"] >= len(frames):
                 if not args.loop:
                     return None
@@ -100,6 +110,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend", choices=("offline", "umr-online"), default="offline")
     parser.add_argument("--csv", default=None, help="A3 flat CSV (trajectory source/backend)")
     parser.add_argument("--csv-fps", type=float, default=30.0)
+    parser.add_argument(
+        "--playback-hz",
+        type=float,
+        default=50.0,
+        help="rate at which a recorded source is replayed (real PICO arrives at its own rate)",
+    )
+    parser.add_argument(
+        "--auto-calibrate",
+        action="store_true",
+        default=True,
+        help="derive a session calibration from the first frames when none is loaded",
+    )
+    parser.add_argument("--no-auto-calibrate", dest="auto_calibrate", action="store_false")
     parser.add_argument("--umr-result", default=None)
     parser.add_argument("--robot-config", default=None)
     parser.add_argument("--duration", type=float, default=30.0)
@@ -137,8 +160,29 @@ def main(argv: list[str] | None = None) -> int:
         pipeline.calibration = SessionCalibration.load(args.calibration)
         print(f"[live] loaded calibration {args.calibration}")
 
+    # ---- automatic session calibration (plan section 74) -----------------
+    if args.auto_calibrate and args.source == "trajectory" and recording is not None:
+        sample = recording.frames[: max(30, int(1.0 * args.playback_hz))]
+        body_present = bool(
+            sample and np.abs(np.asarray([f.smpl_joints for f in sample])).max() > 1e-3
+        )
+        if not body_present:
+            print("[live] auto-calibration skipped: the stream carries no body (stand-in trajectory)")
+            sample = []
+        try:
+            if not sample:
+                raise CalibrationError("no body in the stream")
+            pipeline.calibration = SessionCalibration.from_frames(sample, robot_height_m=1.07)
+            print(f"[live] auto-calibrated: yaw_off={pipeline.calibration.root_yaw_offset_rad:+.3f} rad "
+                  f"scale={pipeline.calibration.body_scale:.3f} "
+                  f"left_right_ok={pipeline.calibration.left_right_ok}")
+            if args.save_calibration:
+                pipeline.calibration.save(args.save_calibration)
+        except CalibrationError as exc:
+            print(f"[live] auto-calibration skipped: {exc}")
+
     print(f"[live] source={args.source} backend={args.backend} duration={args.duration:g}s "
-          f"publish={bool(publisher)}")
+          f"playback={args.playback_hz:g} Hz publish={bool(publisher)}")
     started = time.time()
     try:
         pipeline.start()
