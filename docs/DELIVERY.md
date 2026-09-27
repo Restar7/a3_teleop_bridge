@@ -117,7 +117,7 @@ git push origin feat/a3-streaming-reference
 | --- | --- | --- | --- |
 | https://github.com/Restar7/sonic_for_a3 | `feat/a3-streaming-reference` | `1fcdf7f` | ✅ 已推送(含 LFS 108 objects / 73 MB) |
 | https://github.com/Restar7/a3_teleop_bridge | `main` | `109d8b0` | ✅ 已推送(新仓库首推) |
-| https://github.com/hanyang9/UMR | `feat/a3-online-retarget` | `9341764` | ⛔ 无写权限(第三方上游);用 `dist/UMR_feat_incremental.bundle` 或 fork 到自己账号 |
+| https://github.com/Restar7/UMR | `feat/a3-online-retarget` | `9341764` | ✅ 已推送(LFS 内容已校验为真实文件);`origin` 仍指向 hanyang9/UMR,新增远端 `fork` |
 
 校验方式(本机实测):
 
@@ -130,3 +130,12 @@ ls gh_bridge/docs gh_bridge/scripts                               # 16 份文档
 ```
 
 `sonic_for_a3` 的 `main` 未被改动(仍为 `fe6868b`,方案 §0 第 1 条)。
+
+**关于 UMR 的两条历史线**(重要):`Restar7/UMR` 与 `hanyang9/UMR` 是**分叉的两条历史**
+(`Restar7/UMR:main = d6bb761`,基线是 `8c4db7d Initial public release`;
+`hanyang9/UMR:main = c56b630 Add MIT license`,我们的分支基于它)。我们的 3 个提交只碰
+`robot_configs/humanoid_retarget_agibot_a3.json`、`scripts/humanoid_retarget_config.py`、
+`scripts/retarget_smpl_to_humanoid_surface_vector.py`,**没有引入 LFS 文件**。
+因此分支是"基于 hanyang9 线、推到 Restar7 仓库",直接开 PR 到 `Restar7/UMR:main`
+会因为两条线的差异而显得很大;若要干净的 PR,需要先把 3 个提交 rebase 到 `d6bb761`
+(那会得到一个**未在本机验证过**的树,故本工程默认不做)。

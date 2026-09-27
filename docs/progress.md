@@ -640,9 +640,9 @@
   sonic_for_a3  feat/a3-streaming-reference  1fcdf7f  (LFS 108 objects / 73 MB)
   a3_teleop_bridge  main                     109d8b0  (新仓库首推)
   sonic_for_a3  main 未改动                  fe6868b
-  UMR           feat/a3-online-retarget      ⛔ hanyang9/UMR 无写权限,改用 bundle
+  UMR           feat/a3-online-retarget     9341764 → git@github.com:Restar7/UMR.git
   ```
-- **验证**: 从 GitHub 全新 clone 两个仓库,确认 `docs/a3_teleop_deployment.md`、
+- **验证**: 从 GitHub 全新 clone 三个仓库(UMR 用 `--branch feat/a3-online-retarget`),确认 `docs/a3_teleop_deployment.md`、
   `docs/{DELIVERY,DEPLOY_ORIN,A3_ONBOARD}.md`、`README.md`(含公钥)、`scripts/` 8 个脚本都在。
 - **交付物**: `dist/a3_teleop_orin_20260927_121056.tar.gz`(14 MB,含 MANIFEST 记三仓库 SHA)、
   `dist/*.bundle`。
