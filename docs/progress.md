@@ -558,3 +558,32 @@
   - 记录片段只有约 3 s,循环播放会在片段边界产生参考跳变(stream jumps 65);
     真机 M7 用真实连续数据不会有这个问题。
   - 尚未执行:真实 PICO 4 头显(M7 最后一步)、M9–M12(需 Orin/A3 硬件)。
+
+## 阶段 78/79/86 — 参考流录制与一级 replay
+
+- **commit**: `2910a6c`
+- **执行命令**:
+  ```bash
+  python tools/record_reference.py --endpoint tcp://127.0.0.1:15680 \
+      --duration 12 --out examples/reference_recording/stand_12s
+  python -m a3_teleop_bridge.apps.replay_reference \
+      --windows examples/reference_recording/stand_12s --publish-hz 50 --loop \
+      --endpoint tcp://127.0.0.1:15682 --duration 60
+  pytest tests integration -q            # 167 passed, 1 skipped
+  ```
+- **输入**: `logs/a3_validation/stand.csv` 经 `replay_reference` 发布(A3_REFERENCE_V1)
+- **输出**: `examples/reference_recording/stand_12s/{windows.npz,metadata.json}`(129 KB)
+- **结果**: **PASS**
+  ```text
+  录制      601 窗口,seq 187..787,实测 49.999 Hz,rejected=0
+  重播      SONIC sim2sim 消费录制流:149 步,fall=false,roll/pitch max 1.54°
+  测试      167 passed, 1 skipped(新增 2 项:格式逐字段往返、seq 单调)
+  ```
+- **说明**:
+  - 重播**不改动 payload**,只把 `timestamp_ns` 重新盖到当前时钟上——否则消费侧的
+    freshness watchdog 会把窗口判成 stale;`seq` 保持录制时的单调序列。
+  - 这就是方案 §79 要求的“replay 一级功能”:真机出问题时,不需要机器人、不需要
+    PICO、不需要 UMR,直接重播参考流即可复现。
+  - `examples/README.md` 汇总了三类示例产物(PICO 录制 / UMR→A3 结果与 CSV /
+    参考流录制)及各自的产生命令。
+- **下一阶段**: 剩余可做项已不多;M7 真实头显与 M9–M12 真机/Orin 需硬件
