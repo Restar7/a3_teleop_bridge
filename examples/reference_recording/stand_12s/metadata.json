@@ -1,0 +1,23 @@
+{
+  "endpoint": "tcp://127.0.0.1:15680",
+  "windows": 601,
+  "first_seq": 187,
+  "last_seq": 787,
+  "span_s": 12.000341007,
+  "publish_hz": 49.99857917787586,
+  "dt": 0.02,
+  "horizon": 10,
+  "n_policy_joints": 29,
+  "network_latency_ms": {
+    "p50": 0.436244,
+    "p95": 0.543147
+  },
+  "rejected": 0,
+  "stats": {
+    "received": 601,
+    "rejected": 0,
+    "dropped": 0,
+    "duplicates": 0,
+    "reordered": 0
+  }
+}

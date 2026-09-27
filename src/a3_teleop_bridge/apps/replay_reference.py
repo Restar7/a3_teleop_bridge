@@ -18,6 +18,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -28,7 +29,7 @@ from ..a3.csv_export import A3FlatCsvCodec
 from ..a3.predictor import A3ReferencePredictor
 from ..clocks import LatencyStats, now_ns
 from ..contract import load_contract
-from ..types import BridgeState
+from ..types import A3ReferenceWindow, BridgeState
 from ..transport.publisher import NetworkConfig, ReferencePublisher
 from ..umr.offline import load_umr_result
 
@@ -53,15 +54,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--realtime", action="store_true", default=True)
     parser.add_argument("--no-realtime", dest="realtime", action="store_false")
     parser.add_argument("--stats-every", type=float, default=2.0)
+    parser.add_argument(
+        "--windows",
+        default=None,
+        help="directory written by tools/record_reference.py: republish a recorded "
+        "A3_REFERENCE_V1 stream (plan section 79 -- replay is first class)",
+    )
     args = parser.parse_args(argv)
 
-    if not args.csv and not args.umr_result:
-        parser.error("pass --csv or --umr-result")
+    if args.windows:
+        if args.csv or args.umr_result:
+            parser.error("--windows cannot be combined with --csv/--umr-result")
+    elif not args.csv and not args.umr_result:
+        parser.error("pass --csv, --umr-result or --windows")
 
     contract = load_contract()
     predictor = A3ReferencePredictor()
     network = NetworkConfig.from_yaml()
     publisher = ReferencePublisher(network, contract, bind=args.endpoint)
+
+    if args.windows:
+        return replay_recorded_windows(args, publisher)
 
     # ---- load the source trajectory --------------------------------------
     if args.umr_result:
@@ -180,6 +193,89 @@ def main(argv: list[str] | None = None) -> int:
         }
         publisher.close()
         print(f"[replay] done: {summary}")
+    return 0
+
+
+def load_recorded_windows(directory: Path) -> tuple[list[A3ReferenceWindow], dict]:
+    """Load a window stream written by ``tools/record_reference.py``.
+
+    Returns the windows in stored order plus the recording metadata (``{}`` when
+    the recorder did not write any).  Kept separate from the publish loop so the
+    file format can be tested without a live socket.
+    """
+    data = np.load(directory / "windows.npz")
+    windows: list[A3ReferenceWindow] = []
+    for i in range(data["seq"].shape[0]):
+        windows.append(
+            A3ReferenceWindow(
+                seq=int(data["seq"][i]),
+                timestamp_ns=int(data["timestamp_ns"][i]),
+                dt=float(data["dt"][i]),
+                root_pos_m=np.asarray(data["root_pos_m"][i], dtype=np.float64),
+                root_quat_wxyz=np.asarray(data["root_quat_wxyz"][i], dtype=np.float64),
+                joint_pos_rad=np.asarray(data["joint_pos_rad"][i], dtype=np.float64),
+                joint_vel_rad_s=np.asarray(data["joint_vel_rad_s"][i], dtype=np.float64),
+                source_age_ms=float(data["source_age_ms"][i]),
+                valid=bool(data["valid"][i]),
+            )
+        )
+    metadata: dict = {}
+    meta_path = directory / "metadata.json"
+    if meta_path.is_file():
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    return windows, metadata
+
+
+def replay_recorded_windows(args, publisher) -> int:
+    """Publish the windows stored by ``tools/record_reference.py``.
+
+    The stored payload (root/joints/dt) is sent unchanged -- only ``timestamp_ns``
+    is re-stamped onto the live clock, because a replayed window must look fresh
+    to the consumer's freshness watchdog.  Sequence numbers stay monotonic.
+    """
+    directory = Path(args.windows).expanduser()
+    windows, metadata = load_recorded_windows(directory)
+    if not windows:
+        print("[replay] the recorded window stream is empty")
+        return 1
+    print(
+        f"[replay] {directory}: {len(windows)} recorded windows "
+        f"(recorded publish_hz={metadata.get('publish_hz')})"
+    )
+    print(f"[replay] republishing A3_REFERENCE_V1 on {publisher.bind} at {args.publish_hz:g} Hz")
+
+    period = 1.0 / max(args.publish_hz, 1e-6)
+    started = time.perf_counter()
+    end_time = started + args.duration if args.duration > 0 else None
+    published = 0
+    next_tick = started
+    index = 0
+    try:
+        while True:
+            now = time.perf_counter()
+            if end_time is not None and now >= end_time:
+                break
+            if index >= len(windows):
+                if not args.loop:
+                    break
+                index = 0
+            window = windows[index]
+            window.timestamp_ns = now_ns()  # freshness watchdog needs a live stamp
+            publisher.send(window)
+            published += 1
+            index += 1
+            next_tick += period
+            if next_tick > time.perf_counter() + 0.05:  # fell behind: resynchronise
+                next_tick = time.perf_counter() + period
+            if args.realtime:
+                delay = next_tick - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        publisher.close()
+    print(f"[replay] published {published} windows")
     return 0
 
 
