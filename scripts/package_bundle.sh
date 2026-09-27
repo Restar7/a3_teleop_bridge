@@ -116,7 +116,10 @@ tar -czf "$TARBALL" -C "$OUT_DIR" "$PKG"
 rm -rf "$STAGE"
 
 echo
-echo "[package] size : $(du -h "$TARBALL" | cut -f1)"
+# NOTE: `du` reports 0 allocated blocks on some networked filesystems, so size is
+# taken from the file length instead.
+BYTES="$(stat -c %s "$TARBALL" 2>/dev/null || wc -c < "$TARBALL")"
+echo "[package] size : $(numfmt --to=iec "$BYTES" 2>/dev/null || echo "${BYTES} bytes")"
 echo "[package] sha256: $(sha256sum "$TARBALL" | cut -d' ' -f1)"
 echo "[package] done : $TARBALL"
 echo
