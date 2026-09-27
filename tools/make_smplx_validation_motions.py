@@ -50,6 +50,13 @@ NECK, L_COLLAR, R_COLLAR, HEAD = 12, 13, 14, 15
 L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST = 16, 17, 18, 19, 20, 21
 
 
+#: The shipped rest skeleton is Y-up (head at +Y, ankles at -Y).  The LaFan1
+#: sample stores a ~+90 deg rotation about X in ``poses[:, 0]`` to stand the
+#: character up in a Z-up world; every FK call below uses the same base so the
+#: measured axes and verification metrics are world-frame quantities.
+BASE_ROOT_ROTATION = np.array([np.pi / 2.0, 0.0, 0.0])
+
+
 class SmplFk:
     """Minimal SMPL-X body forward kinematics from the shipped rest joints."""
 
@@ -80,21 +87,35 @@ class SmplFk:
         return out
 
 
-def find_axis(fk: SmplFk, joint: int, effector: int, goal: np.ndarray, angle: float = 0.6) -> tuple[np.ndarray, float]:
-    """Pick the axis (and sign) that best moves ``effector`` along ``goal``."""
-    base = fk.joints(np.zeros(21 * 3), np.zeros(3))
-    ref = base[effector] - base[joint]
+def find_axis(
+    fk: SmplFk,
+    joint: int,
+    effector: int,
+    goal: np.ndarray,
+    angle: float = 0.6,
+    root: np.ndarray | None = None,
+) -> tuple[np.ndarray, float]:
+    """Pick the axis (and sign) that best moves ``effector`` along ``goal``.
+
+    Both the pose and the *displacement* are measured with the base global
+    orientation applied, so ``goal`` is an honest world-frame direction
+    (``+Z`` = up, ``+Y`` = the direction the standing character faces).
+    """
+    root = BASE_ROOT_ROTATION if root is None else root
+    goal = np.asarray(goal, dtype=np.float64)
+    goal = goal / max(np.linalg.norm(goal), 1e-12)
     best = (np.zeros(3), -np.inf)
     for axis in np.eye(3):
         for sign in (1.0, -1.0):
             body = np.zeros((21, 3))
             body[joint - 1] = sign * angle * axis
-            joints = fk.joints(body, np.zeros(3))
-            delta = (joints[effector] - joints[joint]) - ref
-            score = float(np.dot(delta, np.asarray(goal, dtype=np.float64)))
+            joints = fk.joints(body, root)
+            base = fk.joints(np.zeros(21 * 3), root)
+            delta = joints[effector] - base[effector]
+            score = float(np.dot(delta, goal))
             if score > best[1]:
                 best = (sign * axis, score)
-    if best[1] <= 0:
+    if best[1] <= 1e-4:
         raise SystemExit(f"no axis moves joint {joint} effector {effector} along {goal}")
     return best
 
@@ -110,13 +131,13 @@ def shoulder_line_azimuth(joints: np.ndarray) -> float:
 
 def find_twist_axis(fk: SmplFk, joint: int, angle: float = 0.5) -> tuple[np.ndarray, float]:
     """Pick the axis that actually twists the shoulder line about the body axis."""
-    base = shoulder_line_azimuth(fk.joints(np.zeros(21 * 3), np.zeros(3)))
+    base = shoulder_line_azimuth(fk.joints(np.zeros(21 * 3), BASE_ROOT_ROTATION))
     best = (np.zeros(3), -np.inf)
     for axis in np.eye(3):
         for sign in (1.0, -1.0):
             body = np.zeros((21, 3))
             body[joint - 1] = sign * angle * axis
-            joints = fk.joints(body, np.zeros(3))
+            joints = fk.joints(body, BASE_ROOT_ROTATION)
             delta = abs(float(np.angle(np.exp(1j * (shoulder_line_azimuth(joints) - base)))))
             if delta > best[1]:
                 best = (sign * axis, delta)
@@ -167,18 +188,24 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- discover the axes we need (never hand-guessed) --------------------
     up = np.array([0.0, 0.0, 1.0])
-    forward = np.array([0.0, 1.0, 0.0])  # SMPL rest faces -z/+y; resolved by the search
-    left_arm_up = find_axis(fk, L_SHOULDER, L_WRIST, np.array([0.0, 0.0, 1.0]))
-    right_arm_up = find_axis(fk, R_SHOULDER, R_WRIST, np.array([0.0, 0.0, 1.0]))
-    left_arm_fwd = find_axis(fk, L_SHOULDER, L_WRIST, np.array([0.0, 1.0, 0.0]))
-    right_arm_fwd = find_axis(fk, R_SHOULDER, R_WRIST, np.array([0.0, 1.0, 0.0]))
-    knee_bend = find_axis(fk, L_KNEE, L_ANKLE, np.array([0.0, 1.0, 0.0]))
-    hip_raise = find_axis(fk, L_HIP, L_KNEE, np.array([0.0, 1.0, 0.0]))
-    # the right leg is a mirror: its "bend" and "raise" axes must be discovered
-    # separately, never copied from the left side
-    knee_bend_r = find_axis(fk, R_KNEE, R_ANKLE, np.array([0.0, 1.0, 0.0]))
-    hip_raise_r = find_axis(fk, R_HIP, R_KNEE, np.array([0.0, 1.0, 0.0]))
+    forward = np.array([0.0, 1.0, 0.0])  # resolved empirically by the search
+    left_arm_up = find_axis(fk, L_SHOULDER, L_WRIST, up)
+    right_arm_up = find_axis(fk, R_SHOULDER, R_WRIST, up)
+    left_arm_fwd = find_axis(fk, L_SHOULDER, L_WRIST, forward)
+    right_arm_fwd = find_axis(fk, R_SHOULDER, R_WRIST, forward)
+    # knee flexion swings the ankle backwards (-Y) in a standing pose
+    knee_bend = find_axis(fk, L_KNEE, L_ANKLE, -forward)
+    # hip flexion lifts the knee forwards/up
+    hip_raise = find_axis(fk, L_HIP, L_KNEE, forward)
+    # the right leg is a mirror: its axes must be discovered separately, never
+    # copied from the left side
+    knee_bend_r = find_axis(fk, R_KNEE, R_ANKLE, -forward)
+    hip_raise_r = find_axis(fk, R_HIP, R_KNEE, forward)
     twist = find_twist_axis(fk, SPINE2)
+    # standing root height: put the ankle at the same world height the LaFan1
+    # sample uses (~0.10 m), so UMR's ground alignment sees a standing human
+    rest_ankle_z = float(fk.joints(np.zeros(21 * 3), BASE_ROOT_ROTATION)[L_ANKLE][2])
+    root_height = 0.10 - rest_ankle_z
 
     clips: dict[str, list[tuple[int, np.ndarray, float]]] = {
         "stand": [],
@@ -199,13 +226,11 @@ def main(argv: list[str] | None = None) -> int:
     metadata: dict[str, dict] = {}
     for name, specs in clips.items():
         body = build_clip(fk, frames, specs) if specs else np.zeros((frames, 21, 3))
-        root = np.zeros((frames, 3))
-        root[:, 2] = 0.0
         poses = np.zeros((frames, 55, 3), dtype=np.float32)
-        poses[:, 0] = 0.0
+        poses[:, 0] = BASE_ROOT_ROTATION.astype(np.float32)
         poses[:, 1:22] = body.astype(np.float32)
         trans = np.zeros((frames, 3), dtype=np.float32)
-        trans[:, 2] = 0.0
+        trans[:, 2] = root_height
 
         npz_path = out_dir / f"{name}.npz"
         np.savez(
@@ -220,16 +245,20 @@ def main(argv: list[str] | None = None) -> int:
         # ---- verification -------------------------------------------------
         joints_end = fk.joints(poses[-1, 1:22], poses[-1, 0])
         joints_start = fk.joints(poses[0, 1:22], poses[0, 0])
+        world_end = joints_end + trans[-1]
+        world_start = joints_start + trans[0]
         checks = {
             "finite": bool(np.isfinite(poses).all()),
             "frames": int(frames),
             "fps": float(args.fps),
-            "left_wrist_z_gain": float(joints_end[L_WRIST][2] - joints_start[L_WRIST][2]),
-            "right_wrist_z_gain": float(joints_end[R_WRIST][2] - joints_start[R_WRIST][2]),
-            "left_ankle_forward_gain": float(joints_end[L_ANKLE][1] - joints_start[L_ANKLE][1]),
-            "left_ankle_z_gain": float(joints_end[L_ANKLE][2] - joints_start[L_ANKLE][2]),
-            "right_ankle_forward_gain": float(joints_end[R_ANKLE][1] - joints_start[R_ANKLE][1]),
-            "right_ankle_z_gain": float(joints_end[R_ANKLE][2] - joints_start[R_ANKLE][2]),
+            "left_wrist_z_gain": float(world_end[L_WRIST][2] - world_start[L_WRIST][2]),
+            "right_wrist_z_gain": float(world_end[R_WRIST][2] - world_start[R_WRIST][2]),
+            "left_ankle_forward_gain": float(world_end[L_ANKLE][1] - world_start[L_ANKLE][1]),
+            "left_ankle_z_gain": float(world_end[L_ANKLE][2] - world_start[L_ANKLE][2]),
+            "right_ankle_forward_gain": float(world_end[R_ANKLE][1] - world_start[R_ANKLE][1]),
+            "right_ankle_z_gain": float(world_end[R_ANKLE][2] - world_start[R_ANKLE][2]),
+            "left_knee_z_gain": float(world_end[L_KNEE][2] - world_start[L_KNEE][2]),
+            "left_ankle_world_z": float(world_start[L_ANKLE][2]),
             "torso_twist_deg": float(
                 np.rad2deg(
                     np.arctan2(
@@ -247,7 +276,8 @@ def main(argv: list[str] | None = None) -> int:
             "stand": lambda c: abs(c["left_wrist_z_gain"]) < 1e-6 and abs(c["right_wrist_z_gain"]) < 1e-6,
             "raise_left_arm": lambda c: c["left_wrist_z_gain"] > 0.2 and abs(c["right_wrist_z_gain"]) < 1e-6,
             "raise_right_arm": lambda c: c["right_wrist_z_gain"] > 0.2 and abs(c["left_wrist_z_gain"]) < 1e-6,
-            "bend_knees": lambda c: c["left_ankle_forward_gain"] > 0.05 or c["left_ankle_z_gain"] < -0.02,
+            "bend_knees": lambda c: c["left_knee_z_gain"] < -0.02
+            or c["left_ankle_forward_gain"] < -0.02,
             "lift_left_foot": lambda c: c["left_ankle_z_gain"] > 0.05 or c["left_ankle_forward_gain"] > 0.1,
             "lift_right_foot": lambda c: c["right_ankle_z_gain"] > 0.05
             or c["right_ankle_forward_gain"] > 0.1,

@@ -1,0 +1,403 @@
+{
+  "clips": {
+    "bend_knees": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/bend_knees_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/bend_knees/bend_knees.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 5e-09,
+          "joint_pos_max_err_rad": 8.73e-10,
+          "root_quat_max_err_deg": 1.71e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.056138408249155,
+        "root_roll_pitch_abs_max_deg": 11.852147550250493,
+        "all_29_rmse": 0.13328695023620035
+      },
+      "pass": true
+    },
+    "lift_left_foot": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/lift_left_foot_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/lift_left_foot/lift_left_foot.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.94e-09,
+          "joint_pos_max_err_rad": 8.71e-10,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0724145711771464,
+        "root_roll_pitch_abs_max_deg": 1.332680528229434,
+        "all_29_rmse": 0.09440336109047362
+      },
+      "pass": true
+    },
+    "lift_right_foot": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/lift_right_foot_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/lift_right_foot/lift_right_foot.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.97e-09,
+          "joint_pos_max_err_rad": 8.72e-10,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0729262928243477,
+        "root_roll_pitch_abs_max_deg": 1.3936790908803758,
+        "all_29_rmse": 0.09029649659054338
+      },
+      "pass": true
+    },
+    "raise_left_arm": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/raise_left_arm_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/raise_left_arm/raise_left_arm.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.87e-09,
+          "joint_pos_max_err_rad": 8.7e-09,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.07021584458478,
+        "root_roll_pitch_abs_max_deg": 3.0296899174182443,
+        "all_29_rmse": 0.09346814452699792
+      },
+      "pass": true
+    },
+    "raise_right_arm": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/raise_right_arm_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/raise_right_arm/raise_right_arm.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.99e-09,
+          "joint_pos_max_err_rad": 8.59e-09,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0717728615978617,
+        "root_roll_pitch_abs_max_deg": 1.9512246599411516,
+        "all_29_rmse": 0.0809714608559584
+      },
+      "pass": true
+    },
+    "stand": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/stand_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/stand/stand.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 7.12e-10,
+          "joint_pos_max_err_rad": 6.24e-10,
+          "root_quat_max_err_deg": 0.0
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0732878056969286,
+        "root_roll_pitch_abs_max_deg": 1.5352482621956225,
+        "all_29_rmse": 0.05365333605072065
+      },
+      "pass": true
+    },
+    "step_forward_slow": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/step_forward_slow_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/step_forward_slow/step_forward_slow.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.99e-09,
+          "joint_pos_max_err_rad": 8.68e-10,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.070055635646099,
+        "root_roll_pitch_abs_max_deg": 3.042805197882585,
+        "all_29_rmse": 0.08936280956729556
+      },
+      "pass": true
+    },
+    "twist_torso_left": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/twist_torso_left_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/twist_torso_left/twist_torso_left.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.8e-09,
+          "joint_pos_max_err_rad": 8.69e-10,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0728551294925683,
+        "root_roll_pitch_abs_max_deg": 1.4824257287596347,
+        "all_29_rmse": 0.06957893680811357
+      },
+      "pass": true
+    },
+    "twist_torso_right": {
+      "npz": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_validation/twist_torso_right_smplx_agibot_a3.npz",
+      "numeric_validation": {
+        "returncode": 0,
+        "ok": true,
+        "checks": {
+          "finite": true,
+          "root_height_band": true,
+          "root_no_teleport": true,
+          "root_quat_unit": true,
+          "joint_limits": true,
+          "left_knee_joint_direction": true,
+          "right_knee_joint_direction": true,
+          "shoulder_roll_joint_mirror": true,
+          "hip_roll_joint_mirror": true,
+          "ankle_roll_joint_mirror": true,
+          "joint_velocity": true,
+          "joint_acceleration": true,
+          "feet_not_crossed": true,
+          "feet_above_ground": true
+        },
+        "problems": []
+      },
+      "csv_export": {
+        "returncode": 0,
+        "ok": true,
+        "csv": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/a3_validation/twist_torso_right/twist_torso_right.csv",
+        "roundtrip": {
+          "root_pos_max_err_m": 4.91e-09,
+          "joint_pos_max_err_rad": 8.7e-10,
+          "root_quat_max_err_deg": 2.41e-06
+        }
+      },
+      "mujoco": {
+        "returncode": 0,
+        "ok": true,
+        "fall": false,
+        "policy_steps": 149,
+        "root_height_mean": 1.0731207377190193,
+        "root_roll_pitch_abs_max_deg": 3.7152096235228833,
+        "all_29_rmse": 0.0581539760913384
+      },
+      "pass": true
+    }
+  },
+  "passed": 9,
+  "total": 9,
+  "all_pass": true
+}

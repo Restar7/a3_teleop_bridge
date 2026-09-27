@@ -64,10 +64,24 @@ def test_tpose_within_limits(umr_cfg):
 
 def test_policy_limits_match_extracted_limits(umr_cfg):
     doc = yaml.safe_load((BRIDGE_ROOT / "generated" / "a3_joint_limits.yaml").read_text(encoding="utf-8"))
+    non_negative = set(umr_cfg["_bridge"].get("non_negative_joints", ()))
     for name in load_contract().policy_joint_names:
         lo, hi = umr_cfg["robot"]["joint_limits"][name]
-        assert lo == pytest.approx(float(doc["joints"][name]["position_lower"]), abs=1e-9)
+        expected_lo = float(doc["joints"][name]["position_lower"])
+        if name in non_negative:
+            # plan section 17: a human knee never inverts, so the retarget limit is
+            # clipped to zero even though the A3 model allows a small negative range
+            expected_lo = max(0.0, expected_lo)
+        assert lo == pytest.approx(expected_lo, abs=1e-9)
         assert hi == pytest.approx(float(doc["joints"][name]["position_upper"]), abs=1e-9)
+
+
+def test_knees_are_non_negative(umr_cfg):
+    limits = umr_cfg["robot"]["joint_limits"]
+    assert limits["left_knee_joint"][0] == 0.0
+    assert limits["right_knee_joint"][0] == 0.0
+    assert limits["left_knee_joint"][1] > 1.0
+    assert limits["right_knee_joint"][1] > 1.0
 
 
 def test_locked_joints_are_pinned(umr_cfg):

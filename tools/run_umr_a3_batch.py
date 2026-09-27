@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """Run the UMR A3 retarget for many SMPL-X clips (plan sections 17, 21).
 
-The pipeline caches results, so this tool asks it for its exact retarget command
-with ``--dry-run`` and then re-executes that same command with ``--data``,
-``--seq-key`` and ``--out`` swapped per clip.  Nothing about the retargeting
-algorithm or its flags is invented here.
+The UMR pipeline caches by sequence and resolves its motion source through a
+*defaults* file, so this tool writes a per-clip defaults file (a copy of the
+pipeline defaults with ``motion.data``/``motion.seq_key`` overridden) and lets the
+pipeline do the work.  Nothing about the retargeting algorithm or its flags is
+invented here.
 
 Usage:
-    python tools/run_umr_a3_batch.py --data-dir ~/a3_teleop_ws/data/smplx_validation \
-        --out-dir ~/a3_teleop_ws/UMR/output/a3_validation
+    python tools/run_umr_a3_batch.py --data-dir ~/a3_teleop_ws/data/smplx_validation
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
-import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +28,7 @@ sys.path.insert(0, str(BRIDGE_ROOT / "src"))
 from a3_teleop_bridge.contract import load_contract  # noqa: E402
 
 DEFAULT_CONFIG = "robot_configs/humanoid_retarget_agibot_a3.json"
+DEFAULTS_NAME = "humanoid_retarget_defaults_a3_validation.json"
 
 
 def find_umr_root(explicit: str | None) -> Path:
@@ -40,43 +43,29 @@ def find_umr_root(explicit: str | None) -> Path:
     raise SystemExit("could not locate the UMR checkout")
 
 
-def base_command(umr_root: Path, python: Path, config: str, env: dict) -> list[str]:
-    """Ask the pipeline for the retarget command it would run."""
-    proc = subprocess.run(
-        [
-            str(python),
-            "scripts/humanoid_retarget_pipeline.py",
-            "--config",
-            config,
-            "--skip-view",
-            "--force-retarget",  # always emit the retarget command, never the cache hit
-            "--dry-run",
-        ],
-        cwd=str(umr_root),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=900,
+def write_defaults(umr_root: Path, data_dir: Path, seq_key: str) -> Path:
+    """Copy the pipeline defaults and point the motion at one clip.
+
+    The file is written inside the UMR root so the pipeline's relative asset
+    paths keep resolving exactly as they do for its own defaults file.
+    """
+    source = umr_root / "humanoid_retarget_defaults.json"
+    doc = json.loads(source.read_text(encoding="utf-8"))
+    doc.setdefault("motion", {})
+    doc["motion"].update(
+        {
+            "data": str(data_dir),
+            "seq_key": seq_key,
+            "seq_index": 0,
+            "start": 0,
+            "end": -1,
+            "stride": 1,
+            "max_frames": 0,
+        }
     )
-    if proc.returncode != 0:
-        raise SystemExit(f"dry-run failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
-    for line in proc.stdout.splitlines():
-        if "retarget_smpl_to_humanoid_surface_vector.py" in line:
-            # the pipeline prefixes its delegated commands with "[HumanoidPipeline] "
-            text = line.split("[HumanoidPipeline]", 1)[-1].strip()
-            return shlex.split(text)
-    raise SystemExit("could not find the retarget command in the pipeline dry-run output")
-
-
-def swap(argv: list[str], flag: str, value: str) -> list[str]:
-    out = list(argv)
-    if flag in out:
-        idx = out.index(flag)
-        if idx + 1 < len(out):
-            out[idx + 1] = value
-            return out
-    out.extend([flag, value])
-    return out
+    target = umr_root / DEFAULTS_NAME
+    target.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    return target
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,18 +77,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", default=None, help="default <umr>/output/a3_validation")
     parser.add_argument("--only", default=None, help="comma separated clip names")
     parser.add_argument("--force", action="store_true", help="redo clips that already exist")
+    parser.add_argument("--robot-name", default="agibot_a3")
     args = parser.parse_args(argv)
 
     contract = load_contract()
     umr_root = find_umr_root(args.umr_root)
-    python = Path(args.python).expanduser() if args.python else umr_root / ".venv_umr" / "bin" / "python"
+    python = (
+        Path(args.python).expanduser()
+        if args.python
+        else umr_root / ".venv_umr" / "bin" / "python"
+    )
     if not python.is_file():
         raise SystemExit(f"UMR python not found: {python}")
 
     data_dir = Path(args.data_dir).expanduser().resolve()
     if not data_dir.is_dir():
         raise SystemExit(f"data dir not found: {data_dir}")
-    out_dir = Path(args.out_dir).expanduser() if args.out_dir else umr_root / "output" / "a3_validation"
+    out_dir = (
+        Path(args.out_dir).expanduser()
+        if args.out_dir
+        else umr_root / "output" / "a3_validation"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     clips = sorted(p.stem for p in data_dir.glob("*.npz"))
@@ -109,31 +107,46 @@ def main(argv: list[str] | None = None) -> int:
     if not clips:
         raise SystemExit(f"no .npz clips in {data_dir}")
 
-    import os
-
     env = dict(os.environ)
     env.setdefault("SONIC_A3_ROOT", str(contract.sonic_root))
 
-    base = base_command(umr_root, python, args.config, env)
-    print(f"[batch] base retarget command has {len(base)} tokens")
-
     failures = []
     for clip in clips:
-        out_path = out_dir / f"{clip}_smplx_agibot_a3.npz"
+        out_path = out_dir / f"{clip}_smplx_{args.robot_name}.npz"
         if out_path.is_file() and not args.force:
             print(f"[batch] {clip:22s} cached")
             continue
-        cmd = swap(base, "--data", str(data_dir))
-        cmd = swap(cmd, "--seq-key", clip)
-        cmd = swap(cmd, "--out", str(out_path))
+
+        defaults_path = write_defaults(umr_root, data_dir, clip)
+        cmd = [
+            str(python),
+            "scripts/humanoid_retarget_pipeline.py",
+            "--config",
+            args.config,
+            "--defaults",
+            defaults_path.name,
+            "--skip-view",
+            "--stage",
+            "retarget",
+            # the pipeline caches by output path; ALWAYS redo the retarget so a
+            # regenerated source clip cannot silently reuse a stale result
+            "--force-retarget",
+        ]
         print(f"[batch] {clip:22s} running …", flush=True)
         proc = subprocess.run(cmd, cwd=str(umr_root), env=env, capture_output=True, text=True)
-        if proc.returncode != 0:
+        produced = (
+            umr_root
+            / "output"
+            / f"{args.robot_name}_retarget"
+            / f"{clip}_smplx_{args.robot_name}.npz"
+        )
+        if proc.returncode != 0 or not produced.is_file():
             failures.append(clip)
             print(f"[batch] {clip:22s} FAILED")
-            print(proc.stdout[-1500:])
-            print(proc.stderr[-1500:])
+            print("\n".join(proc.stdout.splitlines()[-12:]))
+            print("\n".join(proc.stderr.splitlines()[-12:]))
             continue
+        shutil.copy2(produced, out_path)
         cost = ""
         match = re.search(r"cost mean=([0-9.eE+-]+) max=([0-9.eE+-]+)", proc.stdout)
         if match:

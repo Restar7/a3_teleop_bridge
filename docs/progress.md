@@ -282,5 +282,60 @@
   - `dance1_subject2` 全片(6574 policy step)在 tick 1504 倒地 —— 该动作含跳跃/旋转,
     按方案 §21 属于本阶段**不做**的动作,记录为已知边界,不作为验收项。
 
+---
+
+## 阶段 M3b + M4 — 验收动作集全链路 PASS(9/9)
+
+- **commit**: `479d18a`(工具) + 本条记录
+- **执行命令**:
+  ```bash
+  # 1) 生成方案 §21 的验收动作(SMPL-X)
+  python tools/make_smplx_validation_motions.py
+  # 2) UMR: SMPL-X → A3(每个 clip 一次;correspondence 只建一次)
+  python tools/run_umr_a3_batch.py --data-dir ~/a3_teleop_ws/data/smplx_validation --force
+  # 3) 数值验收 + CSV 导出 + A3-fast/MuJoCo 全链路
+  python tools/run_a3_validation_suite.py \
+      --data-dir ~/a3_teleop_ws/UMR/output/a3_validation \
+      --out-dir   ~/a3_teleop_ws/logs/a3_validation
+  ```
+- **输入**: 9 段 SMPL-X clip(各 90 帧 @30fps)
+- **输出**: `logs/a3_validation/report.json` + 每 clip 的
+  `validation.json / export_report.json / <clip>.csv / mujoco/full_metrics.json`
+- **结果**: **9/9 PASS**
+
+  | clip | MuJoCo | fall | root z | RMSE(29) | CSV round-trip |
+  | --- | --- | --- | --- | --- | --- |
+  | stand | ok | false | 1.073 m | 0.0537 | 7.1e-10 m |
+  | raise_left_arm | ok | false | 1.070 | 0.0935 | 4.9e-09 |
+  | raise_right_arm | ok | false | 1.072 | 0.0810 | 5.0e-09 |
+  | bend_knees | ok | false | 1.056 | 0.1333 | 5.0e-09 |
+  | twist_torso_left | ok | false | 1.073 | 0.0696 | 4.8e-09 |
+  | twist_torso_right | ok | false | 1.073 | 0.0582 | 4.9e-09 |
+  | lift_left_foot | ok | false | 1.072 | 0.0944 | 4.9e-09 |
+  | lift_right_foot | ok | false | 1.073 | 0.0903 | 5.0e-09 |
+  | step_forward_slow | ok | false | 1.070 | 0.0894 | 5.0e-09 |
+
+  数值验收(每 clip 13 项)全部通过:有限性、root 高度带、无 teleport、四元数单位化、
+  关节限位、膝方向(不反折)、左右镜像、速度/加速度、双脚不交叉(heading 参考系)、
+  双脚在地面之上。
+
+- **过程中修复/发现**:
+  1. **合成动作必须使用正确的世界约定**:SMPL-X rest skeleton 是 Y-up,LaFan1 数据在
+     `poses[:,0]` 里带 ~+90° X 旋转并以 `trans[:,2]≈0.93 m` 站立。最初把 global orient
+     设为 0、`trans_z=0`,UMR 于是把机器人重定向到 root z≈0.05 m(趴在地上)。
+  2. **旋转轴必须实测**:左右腿的弯曲/抬起轴不同;早期用左腿轴驱动右腿,右腿完全不动。
+     现在每条腿的轴独立搜索并用 FK 验证。
+  3. **膝限位收紧**:A3 URDF/MJCF 允许膝 −0.1222 rad,retargeter 会把膝压到该下界
+     (膝反折)。按方案 §17"先调 joint limits"把 UMR 配置里膝下界裁到 0
+     (`NON_NEGATIVE_JOINTS`),重跑后膝方向检查通过。
+  4. **UMR 结果缓存**:pipeline 以输出路径为缓存键,重新生成源 clip 后必须
+     `--force-retarget`,否则会静默复用旧结果(曾导致一次误判)。
+  5. 新动作模板为 `smplx_neutral`(betas=0),需要单独建立 correspondence;
+     方案 §25 的 PICO adapter 也是 neutral betas,因此这正是线上路径所需的模板。
+
+- **下一阶段**: commit 08 的 MuJoCo 验证已完成;进入 commit 16/17/18
+  (replay → ZMQ → StreamingReferenceProvider → MuJoCo)
+
+
 
 

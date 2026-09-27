@@ -36,6 +36,12 @@ from a3_teleop_bridge.contract import load_contract  # noqa: E402
 TPOSE_JSON = BRIDGE_ROOT / "generated" / "a3_tpose.json"
 LIMITS_YAML = BRIDGE_ROOT / "generated" / "a3_joint_limits.yaml"
 
+# Knee joints must never invert: the A3 URDF/MJCF allow a small negative knee
+# range (-0.1222 rad) for the physical joint, but a human knee does not bend
+# backwards.  Plan section 17 says to fix exactly this class of artifact through
+# the joint limits rather than by reweighting the objective.
+NON_NEGATIVE_JOINTS = ("left_knee_joint", "right_knee_joint")
+
 # Hinge joints that must never be optimised by the retargeter.
 LOCKED_JOINTS = (
     # two-stage passive foot
@@ -86,6 +92,9 @@ def build_config(contract, tpose_doc: dict, limits_doc: dict) -> dict:
             round(float(entry["position_lower"]), 9),
             round(float(entry["position_upper"]), 9),
         ]
+    for name in NON_NEGATIVE_JOINTS:
+        lower, upper = joint_limits[name]
+        joint_limits[name] = [max(0.0, float(lower)), float(upper)]
     for name in LOCKED_JOINTS:
         joint_limits[name] = [0.0, 0.0]
 
@@ -111,9 +120,11 @@ def build_config(contract, tpose_doc: dict, limits_doc: dict) -> dict:
                 "robot.xml uses ${SONIC_A3_ROOT}; the UMR config loader expands ~ and ${VAR}.",
                 "tpose_qpos comes from a bounded FK fit of the MJCF, not from hand entry.",
                 "passive foot + parallel-mechanism motor joints are locked to [0, 0].",
+                "knee limits are clipped to >= 0 so the retargeter cannot invert them.",
                 "head joints stay neutral in UMR qpos but are excluded from the A3 policy view.",
             ],
             "locked_joints": list(LOCKED_JOINTS),
+            "non_negative_joints": list(NON_NEGATIVE_JOINTS),
             "policy_joint_count": contract.n_policy_joints,
         },
     }

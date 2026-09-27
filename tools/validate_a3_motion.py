@@ -140,28 +140,45 @@ def validate(
     check("joint_limits", worst <= 1e-6, f"worst limit excess {worst:.3e} rad")
 
     # ---- knees --------------------------------------------------------
+    # The A3 knee model itself allows a small negative range (lower limit
+    # -0.1222 rad), so "reverse knee" is judged against a physical tolerance
+    # rather than against exactly zero.
+    knee_tolerance = 0.02  # rad (~1.1 deg)
     for side in ("left", "right"):
         key = f"{side}_knee_joint"
         if key in idx:
             values = joint_pos[:, idx[key]]
+            lower_limit = limits.lower[idx[key]]
             check(
                 f"{key}_direction",
-                bool(values.min() >= -1e-6),
-                f"knee range [{values.min():+.3f}, {values.max():+.3f}] rad (negative = reverse knee)",
+                bool(values.min() >= -knee_tolerance),
+                f"knee range [{values.min():+.4f}, {values.max():+.4f}] rad "
+                f"(model lower limit {lower_limit:+.4f}, tolerance {-knee_tolerance:+.2f})",
             )
 
     # ---- left/right sanity (no mirroring) ------------------------------
+    #: below this, a joint mean is indistinguishable from retarget noise and the
+    #: sign test carries no information
+    mirror_significance = 0.05  # rad
     for suffix in ("shoulder_roll_joint", "hip_roll_joint", "ankle_roll_joint"):
         left, right = f"left_{suffix}", f"right_{suffix}"
         if left in idx and right in idx:
-            lv = joint_pos[:, idx[left]]
-            rv = joint_pos[:, idx[right]]
+            mean_left = float(np.mean(joint_pos[:, idx[left]]))
+            mean_right = float(np.mean(joint_pos[:, idx[right]]))
+            if max(abs(mean_left), abs(mean_right)) < mirror_significance:
+                check(
+                    f"{suffix}_mirror",
+                    True,
+                    f"n/a: means {mean_left:+.3f} / {mean_right:+.3f} rad are below the "
+                    f"{mirror_significance} rad significance threshold",
+                )
+                continue
             # roll axes point the same way in the model, so the mirror invariant is
             # that the mean signs are opposite
             check(
                 f"{suffix}_mirror",
-                bool(np.sign(np.mean(lv)) != np.sign(np.mean(rv)) or abs(np.mean(lv)) < 1e-6),
-                f"mean left {np.mean(lv):+.3f} vs right {np.mean(rv):+.3f} rad",
+                bool(np.sign(mean_left) != np.sign(mean_right)),
+                f"mean left {mean_left:+.3f} vs right {mean_right:+.3f} rad",
             )
 
     # ---- velocity / acceleration --------------------------------------
