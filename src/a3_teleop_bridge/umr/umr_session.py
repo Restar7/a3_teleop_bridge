@@ -128,6 +128,11 @@ class UmrRetargetSession:
         self.common = common
 
         config_path = Path(self.robot_config).expanduser() if self.robot_config else None
+        if config_path is None:
+            # the plan fixes A3 as the robot: default to the config the M3/M4
+            # runs used instead of failing on an omitted flag
+            default_config = self._root / "robot_configs" / "humanoid_retarget_agibot_a3.json"
+            config_path = default_config if default_config.is_file() else None
         if config_path is None or not config_path.is_file():
             raise UmrSessionError(
                 f"robot config not found: {config_path}; pass robot_config="

@@ -34,6 +34,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--policy-steps", type=int, default=3000)
     parser.add_argument("--duration", type=float, default=120.0, help="pipeline seconds")
     parser.add_argument("--port", type=int, default=15640)
+    parser.add_argument(
+        "--recording",
+        default=None,
+        help="recorded PICO session dir: drives the bridge with the *online UMR* "
+        "backend (--source recording --backend umr-online) instead of the replay "
+        "backend.  This is the hardware-free M7 chain: only the headset is missing.",
+    )
+    parser.add_argument(
+        "--startup-wait",
+        type=float,
+        default=None,
+        help="seconds to wait for retarget_live before starting the policy "
+        "(default 2.5, or 25 with --recording: the online UMR session needs a "
+        "~15 s one-off initialisation)",
+    )
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "live_chain"))
     args = parser.parse_args(argv)
 
@@ -47,7 +62,9 @@ def main(argv: list[str] | None = None) -> int:
         "-m",
         "a3_teleop_bridge.apps.retarget_live",
         "--source",
-        "trajectory",
+        "recording" if args.recording else "trajectory",
+        "--backend",
+        "umr-online" if args.recording else "offline",
         "--csv",
         str(Path(args.csv).expanduser()),
         "--csv-fps",
@@ -59,10 +76,13 @@ def main(argv: list[str] | None = None) -> int:
         "--stats",
         str(out_dir / "pipeline_stats.json"),
     ]
+    if args.recording:
+        live_cmd += ["--recording", str(Path(args.recording).expanduser())]
     live_log = (out_dir / "retarget_live.log").open("w", encoding="utf-8")
     live = subprocess.Popen(live_cmd, cwd=str(BRIDGE_ROOT), stdout=live_log, stderr=subprocess.STDOUT)
     print(f"[live-chain] retarget_live started (pid {live.pid}) on {endpoint}")
-    time.sleep(2.5)
+    wait = args.startup_wait if args.startup_wait is not None else (25.0 if args.recording else 2.5)
+    time.sleep(wait)
 
     sim_cmd = [
         str(contract.sonic_root / ".venv_sim" / "bin" / "python"),

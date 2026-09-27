@@ -470,3 +470,44 @@
     每帧则调用 `bind_source_slots_with_normals` + `solve_frame_body_segment_qp`
     (warm start = 上一帧解)。
 - **下一阶段**: 完成 Stage I 装配 → M7(真实 PICO 或 recorded PICO 驱动 online UMR)
+
+## 阶段 13(part 2)— online UMR 求解打通 + 单帧性能(200 ms → 48 ms)
+
+- **commit**: `92dee36`(本次);上游 UMR 未改动(仅使用其公开函数)
+- **执行命令**:
+  ```bash
+  source env.sh                                     # 导出 SONIC_A3_ROOT 等
+  UMR/.venv_umr/bin/python /tmp/test_online_session.py     # 逐帧求解探针
+  UMR/.venv_umr/bin/python /tmp/profile_prepare.py         # cProfile 归因
+  UMR/.venv_umr/bin/python /tmp/bench_smplx_device.py      # CPU vs CUDA 对比
+  .venv_bridge/bin/python -m pytest tests -q               # 161 passed, 1 skipped
+  ```
+- **输入**: `recordings/m5_lift_left_foot`(recorded PICO,90 帧)+ A3 robot config
+- **输出**: 无新文件;`UmrRetargetSession.initialize()` 现在返回可用的求解会话
+- **结果**: **PASS — 在线求解可用,端到端 ≈ 20 Hz**
+  ```text
+  initialize     14.5 s(args 2.8 s / geometry 7.8 s / warmup 3.9 s)
+  prepare/frame  15.5 ms(SMPL-X 前向 7.3 ms + 绑定 + ground contact)
+  solve/frame    34.3 ms(iters=1,warm start)
+  合计           49.7 ms → 20.1 Hz
+  ```
+- **两个根因(与 §0「不得猜测」一致,逐项从 UMR 源码对齐)**:
+  1. `selected_slot_ids` 之前用的是全部 **4096** 个 correspondence slot;
+     离线 pipeline 走的是 `sample_segment_slots`(按身体段、固定 seed 抽样,
+     A3/SMPL-X 绑定为 **456** 个)。求解器里每个 Jacobian 循环因此长了约 9 倍。
+     现在 online 与 offline 使用同一抽样逻辑,数值也可直接对比。
+  2. `ground_contact_map_cost` / `ground_contact_anchor_cost` 已启用,但 online 传 `None`;
+     离线传 `compute_source_slot_ground_contact` 的每帧结果。现按同一语义
+     (取 z、snap 阈值内归零、weight = z − min z)在线计算。
+- **额外发现(实测,不是猜的)**:单帧 SMPL-X 前向在 **CPU 上更快**
+  (前向 7.3 ms vs 9.5 ms;整个 prepare 15.5 ms vs 37.8 ms)——batch=1 时
+  CUDA 的 per-call launch/sync 摊不掉。因此 online 会话默认 `smplx_device="cpu"`,
+  离线批量 pipeline 仍用配置里的设备。
+- **已知问题**:
+  - 20 Hz 低于方案 §45 的 25–50 Hz 目标。剩余时间在 `solve`(34 ms,单次
+    Clarabel QP + 456 slot 的 Jacobian)与 SMPL-X 前向(7.3 ms);
+    参考流是 latest-only + SONIC 侧有界插值,20 Hz 更新不会造成丢帧,
+    但若要进一步提速,应在 UMR 侧批量求解(方案 §0 允许未来做,当前不改算法)。
+  - 未跑真实 PICO(M7 剩余部分),M9–M12 仍需 Orin/A3 硬件。
+- **下一阶段**: M7(真实 PICO)或继续 §46 的预测器/ V2 TensorRT parity(commit 27)
+

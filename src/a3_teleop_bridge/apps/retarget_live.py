@@ -43,9 +43,9 @@ from ..umr.online import OnlineTeleopPipeline
 
 def make_frame_provider(args, recording=None):
     """Return a callable producing the next :class:`HumanSmplFrame` (or None)."""
-    if args.source == "trajectory":
+    if args.source in ("trajectory", "recording"):
         if recording is None:
-            raise SystemExit("--source trajectory needs --csv or --umr-result")
+            raise SystemExit(f"--source {args.source} needs --csv or --recording")
         state = {"i": 0, "next_time": time.perf_counter()}
         frames = recording.frames
         # replay at the recorded rate: an unthrottled producer would starve the
@@ -106,10 +106,16 @@ def build_backend(args):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("pico", "trajectory"), default="pico")
+    parser.add_argument("--source", choices=("pico", "trajectory", "recording"), default="pico")
     parser.add_argument("--backend", choices=("offline", "umr-online"), default="offline")
     parser.add_argument("--csv", default=None, help="A3 flat CSV (trajectory source/backend)")
     parser.add_argument("--csv-fps", type=float, default=30.0)
+    parser.add_argument(
+        "--recording",
+        default=None,
+        help="recorded PICO session directory; with --backend umr-online this is the "
+        "hardware-free M7 path (everything but the headset)",
+    )
     parser.add_argument(
         "--playback-hz",
         type=float,
@@ -145,6 +151,12 @@ def main(argv: list[str] | None = None) -> int:
             recording = _csv_to_human_stream(Path(args.csv).expanduser(), args.csv_fps)
         else:
             raise SystemExit("--source trajectory needs --csv (or use --source pico)")
+    elif args.source == "recording":
+        if not args.recording:
+            raise SystemExit("--source recording needs --recording <dir>")
+        # real recorded SMPL-X body frames, replayed on the live clock: this is
+        # the source M7 uses, minus the headset
+        recording = PicoRecording.load(Path(args.recording).expanduser())
 
     provider, subscriber = make_frame_provider(args, recording)
     backend = build_backend(args)
