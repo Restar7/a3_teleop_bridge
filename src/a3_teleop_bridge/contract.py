@@ -54,6 +54,27 @@ class A3Contract:
     def policy_to_csv_index(self) -> tuple[int, ...]:
         return tuple(int(i) for i in self.raw["policy_to_csv_index"])
 
+    # ---- encoder (IsaacLab/URDF) joint order ----------------------------
+    @property
+    def il_joint_names(self) -> tuple[str, ...]:
+        """Joint order the SONIC encoder consumes (``dof_il``).
+
+        This is a genuine permutation of :attr:`policy_joint_names`; publishing
+        raw policy-order joints without permuting them silently corrupts the
+        policy input (found during M6).
+        """
+        return tuple(self.raw["il_joint_names"])
+
+    @property
+    def policy_to_il_index(self) -> tuple[int, ...]:
+        """``policy_to_il_index[i]`` = position of policy joint *i* in il order."""
+        return tuple(int(i) for i in self.raw["policy_to_il_index"])
+
+    @property
+    def il_to_policy_index(self) -> tuple[int, ...]:
+        """``il_to_policy_index[k]`` = policy index of the *k*-th encoder joint."""
+        return tuple(int(i) for i in self.raw["il_to_policy_index"])
+
     # ---- timing ---------------------------------------------------------
     @property
     def policy_hz(self) -> float:

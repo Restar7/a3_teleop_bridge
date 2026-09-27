@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BRIDGE_ROOT = Path(__file__).resolve().parents[1]
@@ -209,6 +210,44 @@ def parse_cpp_constants(path: Path) -> dict[str, int]:
     return known
 
 
+def parse_urdf_actuated_joint_order(path: Path, passive_joint_names: set[str]) -> list[str]:
+    """Encoder joint order (``dof_il``) as SONIC derives it from the URDF.
+
+    ``sim2sim_a3_mujoco.load_urdf_actuated_joints`` walks the URDF kinematic tree
+    breadth-first, visiting each link's children sorted by *child link name*, and
+    keeps non-fixed joints that are not passive foot hinges.  This reproduces that
+    exactly -- the encoder order is a real permutation of the CSV/MJCF order, and
+    getting it wrong silently destroys the policy input (verified in M6).
+    """
+    root = ET.parse(path).getroot()
+    all_links = [elem.attrib["name"] for elem in root.findall("link")]
+    child_links: set[str] = set()
+    parent_to_joints: dict[str, list[tuple[str, str, str]]] = {}
+    for joint in root.findall("joint"):
+        parent = joint.find("parent").attrib["link"]
+        child = joint.find("child").attrib["link"]
+        child_links.add(child)
+        parent_to_joints.setdefault(parent, []).append(
+            (joint.attrib["name"], joint.attrib.get("type", ""), child)
+        )
+
+    roots = [link for link in all_links if link not in child_links]
+    if len(roots) != 1:
+        raise SystemExit(f"{path}: expected exactly one URDF root link, got {roots}")
+
+    actuated: list[str] = []
+    queue = [roots[0]]
+    while queue:
+        link = queue.pop(0)
+        for joint_name, joint_type, child in sorted(
+            parent_to_joints.get(link, []), key=lambda item: item[2].lower()
+        ):
+            if joint_type != "fixed" and joint_name not in passive_joint_names:
+                actuated.append(joint_name)
+            queue.append(child)
+    return actuated
+
+
 def parse_csv_header(path: Path) -> list[str]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         header = handle.readline().strip()
@@ -244,6 +283,12 @@ def build_contract(sonic_root: Path) -> dict:
     root_columns = sample_csv_header[1:7]
     csv_joint_columns = sample_csv_header[7:]
 
+    # --- encoder (IsaacLab/URDF) joint order ------------------------------
+    urdf_path = sonic_root / consts["DEFAULT_URDF"]
+    il_joint_names = parse_urdf_actuated_joint_order(urdf_path, set(passive_foot_joints))
+    policy_to_il = [il_joint_names.index(n) for n in policy_joint_names]
+    il_to_policy = [policy_joint_names.index(n) for n in il_joint_names]
+
     presets = consts["ENCODER_MODE_PRESETS"]
     a3_fast_preset = list(presets["a3_fast"])
 
@@ -266,6 +311,9 @@ def build_contract(sonic_root: Path) -> dict:
         "csv_joint_names": csv_joint_names,
         "csv_joint_count": len(csv_joint_names),
         "policy_to_csv_index": policy_to_sdk,
+        "il_joint_names": il_joint_names,
+        "policy_to_il_index": policy_to_il,
+        "il_to_policy_index": il_to_policy,
         "excluded_joint_names": excluded_joint_names,
         "head_joint_names": head_joints,
         "passive_foot_joint_names": passive_foot_joints,
@@ -386,6 +434,24 @@ def assert_contract(contract: dict) -> list[str]:
         "root_translateX", "root_translateY", "root_translateZ",
         "root_rotateX", "root_rotateY", "root_rotateZ",
     ], "root columns are translateXYZ + rotateXYZ")
+
+    il_names = contract["il_joint_names"]
+    check("il_joint_count", len(il_names) == 29 and len(set(il_names)) == 29,
+          f"{len(il_names)} unique encoder (URDF) joints")
+    p2i = contract["policy_to_il_index"]
+    i2p = contract["il_to_policy_index"]
+    check("policy_to_il_permutation",
+          sorted(p2i) == list(range(29)) and sorted(i2p) == list(range(29)),
+          "policy<->encoder index maps are permutations")
+    check("il_roundtrip",
+          all(i2p[p2i[i]] == i for i in range(29)),
+          "policy -> il -> policy is the identity")
+    check("il_names_match_policy",
+          sorted(il_names) == sorted(contract["policy_joint_names"]),
+          "encoder joint names are the same set as the policy joints")
+    check("il_order_differs_from_policy",
+          il_names != list(contract["policy_joint_names"]),
+          "encoder order is a real permutation of the CSV/MJCF order")
 
     mjcf = Path(contract["assets"]["mjcf"])
     check("mjcf_exists", mjcf.is_file(), f"MJCF present: {mjcf}")

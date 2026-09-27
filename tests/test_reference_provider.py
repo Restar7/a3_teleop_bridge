@@ -174,6 +174,10 @@ def test_streaming_provider_decodes_bridge_packet(tmp_path):
     assert decoded["source_age_ms"] == pytest.approx(4.5)
     assert decoded["anchor_quat_shape"] == [10, 4]
     assert decoded["dof_il_shape"] == [10, 29]
-    assert decoded["joint_pos_first"] == pytest.approx(float(window.joint_pos_rad[0, 0]), abs=1e-6)
-    assert decoded["joint_pos_last"] == pytest.approx(float(window.joint_pos_rad[-1, -1]), abs=1e-6)
+    # the wire carries ENCODER (il) order, so the first wire joint is the policy
+    # joint named by il_joint_names[0]
+    expected_first = float(window.joint_pos_rad[0, contract.il_to_policy_index[0]])
+    expected_last = float(window.joint_pos_rad[-1, contract.il_to_policy_index[-1]])
+    assert decoded["joint_pos_first"] == pytest.approx(expected_first, abs=1e-6)
+    assert decoded["joint_pos_last"] == pytest.approx(expected_last, abs=1e-6)
     np.testing.assert_allclose(decoded["root_pos_last"], window.root_pos_m[-1], atol=1e-6)

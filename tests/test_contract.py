@@ -140,3 +140,22 @@ def test_contract_numpy_shapes(contract):
     state = A3CanonicalState.invalid(seq=0, timestamp_ns=0)
     assert not state.valid
     assert state.joint_pos_rad.shape == (n,)
+
+
+def test_encoder_joint_order_is_a_real_permutation(contract):
+    """The encoder (il) order differs from the CSV/MJCF policy order."""
+    il = contract.il_joint_names
+    policy = contract.policy_joint_names
+    assert len(il) == 29
+    assert set(il) == set(policy)
+    assert il != policy, "expected a genuine permutation, not the identity"
+    p2i = contract.policy_to_il_index
+    i2p = contract.il_to_policy_index
+    assert sorted(p2i) == list(range(29))
+    assert sorted(i2p) == list(range(29))
+    for i in range(29):
+        assert i2p[p2i[i]] == i
+    # spot check against the names
+    assert il[i2p.index(policy.index("left_hip_pitch_joint"))] == "left_hip_pitch_joint"
+    assert il[0] == "left_hip_pitch_joint"
+    assert policy[0] == "waist_yaw_joint"

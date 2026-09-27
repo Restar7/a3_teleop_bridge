@@ -50,6 +50,12 @@ PAYLOAD_KEY = b"p"
 
 ARRAY_ORDER = ("root_pos_m", "root_quat_wxyz", "joint_pos_rad", "joint_vel_rad_s")
 
+#: Joint order carried by ``joint_pos_rad`` / ``joint_vel_rad_s``: the order the
+#: SONIC A3-fast encoder consumes (URDF/IsaacLab ``dof_il`` order), NOT the
+#: CSV/MJCF policy order.  The two are different permutations of the same 29
+#: joints, so the header is tagged and the names are shipped for verification.
+JOINT_ORDER_TAG = "a3_il_v1"
+
 
 class ProtocolError(RuntimeError):
     """Raised when a packet is malformed, stale-versioned or inconsistent."""
@@ -80,7 +86,27 @@ def _layout(contract: A3Contract) -> _Layout:
     return _Layout(dtype="<f4", shapes=shapes, offsets=offsets, n_floats=cursor)
 
 
-def _header_for(window: A3ReferenceWindow, layout: _Layout) -> dict:
+def _to_il_order(window: A3ReferenceWindow, contract: A3Contract) -> tuple[np.ndarray, np.ndarray]:
+    """Permute policy-order joint arrays into the encoder (il) order.
+
+    ``il[k] = policy[il_to_policy_index[k]]`` -- the encoder joint *k* is looked
+    up by name in the policy view.
+    """
+    perm = np.asarray(contract.il_to_policy_index, dtype=np.int64)
+    joint_pos = np.asarray(window.joint_pos_rad, dtype=np.float64)[:, perm]
+    joint_vel = np.asarray(window.joint_vel_rad_s, dtype=np.float64)[:, perm]
+    return joint_pos, joint_vel
+
+
+def _from_il_order(joint_pos: np.ndarray, joint_vel: np.ndarray, contract: A3Contract):
+    """Inverse permutation: encoder order -> policy order."""
+    inverse = np.asarray(contract.policy_to_il_index, dtype=np.int64)
+    return np.asarray(joint_pos, dtype=np.float64)[:, inverse], np.asarray(
+        joint_vel, dtype=np.float64
+    )[:, inverse]
+
+
+def _header_for(window: A3ReferenceWindow, layout: _Layout, contract: A3Contract) -> dict:
     return {
         "version": PROTOCOL_VERSION,
         "seq": int(window.seq),
@@ -93,20 +119,26 @@ def _header_for(window: A3ReferenceWindow, layout: _Layout) -> dict:
         "dtype": layout.dtype,
         "shapes": layout.shapes,
         "order": list(ARRAY_ORDER),
+        "joint_order": JOINT_ORDER_TAG,
+        "joint_names": list(contract.il_joint_names),
     }
 
 
-def _payload_for(window: A3ReferenceWindow, layout: _Layout) -> bytes:
+def _payload_for(window: A3ReferenceWindow, layout: _Layout, contract: A3Contract) -> bytes:
+    joint_pos_il, joint_vel_il = _to_il_order(window, contract)
+    arrays = {
+        "root_pos_m": np.asarray(window.root_pos_m, dtype=np.float32),
+        "root_quat_wxyz": np.asarray(window.root_quat_wxyz, dtype=np.float32),
+        "joint_pos_rad": joint_pos_il.astype(np.float32),
+        "joint_vel_rad_s": joint_vel_il.astype(np.float32),
+    }
     for name in ARRAY_ORDER:
-        arr = np.asarray(getattr(window, name), dtype=np.float32)
+        arr = arrays[name]
         expected = tuple(layout.shapes[name])
         if arr.shape != expected:
             raise ProtocolError(f"{name}: expected shape {expected}, got {arr.shape}")
     payload = np.concatenate(
-        [
-            np.ascontiguousarray(getattr(window, name), dtype=np.float32).reshape(-1)
-            for name in ARRAY_ORDER
-        ]
+        [np.ascontiguousarray(arrays[name]).reshape(-1) for name in ARRAY_ORDER]
     ).astype(layout.dtype, copy=False)
     return payload.tobytes()
 
@@ -115,8 +147,12 @@ def encode_packet(window: A3ReferenceWindow, contract: A3Contract | None = None)
     """Single-frame encoding (use this with ZMQ_CONFLATE)."""
     contract = contract or load_contract()
     layout = _layout(contract)
-    header = msgpack.packb(_header_for(window, layout), use_bin_type=True)
-    return _MAGIC_STRUCT.pack(MAGIC, len(header)) + header + _payload_for(window, layout)
+    header = msgpack.packb(_header_for(window, layout, contract), use_bin_type=True)
+    return (
+        _MAGIC_STRUCT.pack(MAGIC, len(header))
+        + header
+        + _payload_for(window, layout, contract)
+    )
 
 
 def decode_packet(packet: bytes, contract: A3Contract | None = None) -> A3ReferenceWindow:
@@ -137,8 +173,8 @@ def encode_frames(window: A3ReferenceWindow, contract: A3Contract | None = None)
     """Two-frame multipart encoding (only for transports without conflate)."""
     contract = contract or load_contract()
     layout = _layout(contract)
-    header = msgpack.packb(_header_for(window, layout), use_bin_type=True)
-    return [header, _payload_for(window, layout)]
+    header = msgpack.packb(_header_for(window, layout, contract), use_bin_type=True)
+    return [header, _payload_for(window, layout, contract)]
 
 
 def decode_frames(frames, contract: A3Contract | None = None) -> A3ReferenceWindow:
@@ -189,6 +225,14 @@ def _decode_header_payload(
             f"payload holds {payload.size} floats, expected {layout.n_floats}"
         )
 
+    if header.get("joint_order") != JOINT_ORDER_TAG:
+        raise ProtocolError(
+            f"joint order mismatch: got {header.get('joint_order')!r}, want {JOINT_ORDER_TAG!r}"
+        )
+    names = header.get("joint_names")
+    if names is not None and list(names) != list(contract.il_joint_names):
+        raise ProtocolError("joint_names in the packet do not match this build's encoder order")
+
     arrays: dict[str, np.ndarray] = {}
     for name in ARRAY_ORDER:
         shape = tuple(layout.shapes[name])
@@ -199,6 +243,12 @@ def _decode_header_payload(
     for name in ARRAY_ORDER:
         if not np.isfinite(arrays[name]).all():
             raise ProtocolError(f"{name} contains non-finite values")
+
+    joint_pos_policy, joint_vel_policy = _from_il_order(
+        arrays["joint_pos_rad"], arrays["joint_vel_rad_s"], contract
+    )
+    arrays["joint_pos_rad"] = joint_pos_policy
+    arrays["joint_vel_rad_s"] = joint_vel_policy
 
     try:
         state = BridgeState(str(header.get("state", BridgeState.TRACKING.value)))

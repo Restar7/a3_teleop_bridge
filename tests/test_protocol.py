@@ -14,7 +14,9 @@ from a3_teleop_bridge.transport.protocol import (
     PROTOCOL_VERSION,
     ProtocolError,
     decode_frames,
+    decode_packet,
     encode_frames,
+    encode_packet,
 )
 from a3_teleop_bridge.transport.publisher import (
     NetworkConfig,
@@ -184,3 +186,49 @@ def test_hold_window_roundtrip(contract):
 
 def test_version_constant_is_frozen():
     assert PROTOCOL_VERSION == "A3_REFERENCE_V1"
+
+
+def test_wire_joint_order_is_encoder_order(contract):
+    """joint_pos on the wire must be permuted into the encoder (il) order."""
+    import msgpack
+
+    n = contract.n_policy_joints
+    values = np.arange(n, dtype=np.float64)  # policy joint i carries value i
+    window = A3ReferenceWindow(
+        seq=1,
+        timestamp_ns=1,
+        dt=contract.window_dt,
+        root_pos_m=np.zeros((contract.window_frames, 3)),
+        root_quat_wxyz=np.tile(np.array([1.0, 0, 0, 0]), (contract.window_frames, 1)),
+        joint_pos_rad=np.tile(values, (contract.window_frames, 1)),
+        joint_vel_rad_s=np.zeros((contract.window_frames, n)),
+    )
+    packet = encode_packet(window, contract)
+    header_len = int.from_bytes(packet[4:8], "little")
+    header = msgpack.unpackb(packet[8 : 8 + header_len], raw=False)
+    assert header["joint_order"] == "a3_il_v1"
+    assert header["joint_names"] == list(contract.il_joint_names)
+
+    payload = np.frombuffer(packet[8 + header_len :], dtype="<f4")
+    offset = contract.window_frames * 3 + contract.window_frames * 4
+    wire_row = payload[offset : offset + n]
+    for k in range(n):
+        assert wire_row[k] == pytest.approx(float(values[contract.il_to_policy_index[k]]))
+
+    # and the decoder must undo the permutation exactly
+    back = decode_packet(packet, contract)
+    np.testing.assert_allclose(back.joint_pos_rad, np.tile(values, (contract.window_frames, 1)))
+
+
+def test_decoder_rejects_wrong_joint_order(contract):
+    import msgpack
+
+    window = make_window(contract)
+    packet = bytearray(encode_packet(window, contract))
+    header_len = int.from_bytes(packet[4:8], "little")
+    header = msgpack.unpackb(bytes(packet[8 : 8 + header_len]), raw=False)
+    header["joint_order"] = "a3_policy_v1"
+    new_header = msgpack.packb(header, use_bin_type=True)
+    tampered = bytes(packet[:4]) + len(new_header).to_bytes(4, "little") + new_header + bytes(packet[8 + header_len :])
+    with pytest.raises(ProtocolError):
+        decode_packet(tampered, contract)
