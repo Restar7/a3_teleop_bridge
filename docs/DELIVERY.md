@@ -11,6 +11,8 @@
 | `sonic_for_a3_feat_incremental.bundle` | 21 KB | 基于 `origin/main` 的增量 bundle(6 个 streaming 接口提交) |
 | `UMR_feat_incremental.bundle` | 4 KB | 基于 `origin/main` 的增量 bundle(3 个 A3/online 提交) |
 
+包内自带 `scripts/`(部署脚本),解包即可在 Orin 上直接跑。
+
 重新生成:
 
 ```bash
@@ -93,7 +95,7 @@ git push git@github.com:hanyang9/UMR.git feat/a3-online-retarget
 
 ```bash
 # a3_teleop_bridge(新仓库)
-git clone a3_teleop_bridge.bundle a3_teleop_bridge
+git clone -b main a3_teleop_bridge.bundle a3_teleop_bridge   # -b main: bundle 的 HEAD 不指向分支
 cd a3_teleop_bridge
 git remote set-url origin git@github.com:Restar7/a3_teleop_bridge.git
 git push -u origin main

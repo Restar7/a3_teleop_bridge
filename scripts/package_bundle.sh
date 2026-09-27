@@ -49,7 +49,7 @@ mkdir -p "$STAGE"
 
 # ---------------------------------------------------------------- bridge ----
 mkdir -p "$STAGE/a3_teleop_bridge"
-for item in src tools tests integration configs docs examples benchmarks pyproject.toml README.md; do
+for item in src tools tests integration configs docs examples benchmarks scripts pyproject.toml README.md requirements-bridge.txt; do
   if [ -e "$BRIDGE_ROOT/$item" ]; then
     cp -a "$BRIDGE_ROOT/$item" "$STAGE/a3_teleop_bridge/"
   fi
