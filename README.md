@@ -15,7 +15,7 @@ M2  官方 UMR G1 baseline                         PASS
 M3  SMPL-X → UMR → A3                            PASS
 M4  A3 → flat CSV → A3-fast → MuJoCo (9/9 动作)  PASS
 M6  trajectory → ZMQ → streaming → MuJoCo        PASS(含 5 分钟耐久)
-M5  离线 PICO → UMR → A3 → MuJoCo               工具就绪(§81 集成测试用合成录制验证)
+M5  recorded PICO → UMR → A3 → MuJoCo            PASS(4/4,docs/m5_pico_chain.md)
 M7  实时 PICO                                   需要 PICO 4 硬件
 ```
 
@@ -81,8 +81,8 @@ cd $A3WS/a3_teleop_bridge
 python -m a3_teleop_bridge.apps.record_pico --synthetic --duration 20 \
     --out $A3WS/recordings/example_synthetic
 
-# Terminal 2: 录制 → UMR source adapter → A3(见 integration/ 与 §81)
-pytest tests/test_fault_injection.py integration -q
+# Terminal 2: 录制 → source adapter → UMR → A3 → MuJoCo(一条命令)
+python tools/run_m5_pico_chain.py --clips stand,lift_left_foot,step_forward_slow
 
 # Terminal 3: 轨迹 → ZMQ → MuJoCo(与 Mode C 相同,只是参考来自录制)
 python -m a3_teleop_bridge.apps.replay_reference \

@@ -393,3 +393,33 @@
 
 
 
+
+
+---
+
+## 阶段 M5 — recorded PICO → UMR → A3 → MuJoCo(4/4 PASS)
+
+- **commit**: `5bd81fb`
+- **执行命令**:
+  ```bash
+  python tools/run_m5_pico_chain.py \
+      --clips stand,lift_left_foot,step_forward_slow,twist_torso_left
+  ```
+  (内部依次调用 `make_synthetic_pico_recording` → `convert_pico_recording` →
+   `run_umr_a3_batch` → `run_a3_validation_suite`)
+- **输入**: SMPL-X 验收动作 → 打包成 PICO 录制(局部关节 + 21×3 pose + body quat)
+- **输出**: `logs/m5/m5_report.json`,每 clip 的 validation/export/mujoco 证据
+- **结果**: **4/4 PASS**
+
+  | clip | fall | root z | RMSE(29) |
+  | --- | --- | --- | --- |
+  | stand | false | 1.073 m | 0.0532 |
+  | lift_left_foot | false | 1.073 | 0.0944 |
+  | step_forward_slow | false | 1.070 | 0.0885 |
+  | twist_torso_left | false | 1.073 | 0.0692 |
+
+- **已知问题**:
+  - `apps/record_pico.py --synthetic` 的内置示例是占位 body(单点),不能用于
+    retarget;M5 用 `tools/make_synthetic_pico_recording.py`(经官方 rest skeleton FK)。
+  - 真实 PICO 头显录制(Mode B/D)尚未执行,需要硬件;链路与坐标约定已验证。
+- **下一阶段**: M7(实时 PICO,需硬件)、M9-M12(Orin / 真机)
