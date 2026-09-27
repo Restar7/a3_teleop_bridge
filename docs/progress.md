@@ -336,6 +336,46 @@
 - **下一阶段**: commit 08 的 MuJoCo 验证已完成;进入 commit 16/17/18
   (replay → ZMQ → StreamingReferenceProvider → MuJoCo)
 
+---
+
+## 阶段 16/17/18 + M6 — streaming 参考链路
+
+- **commit**:
+  - `sonic_for_a3` `301d4f1`(ReferenceProvider 抽象)+ `db3110e`(joint order 校验)
+  - bridge `2019bda`(回归测试)、`e4176eb`(replay/streaming 工具 + 修正)
+- **执行命令**:
+  ```bash
+  # SONIC 侧新增 ReferenceProvider(csv / stream),并用回归测试确认 csv 路径不变
+  pytest tests/test_reference_provider.py
+  # 离线轨迹 → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo
+  python tools/run_a3_streaming.py --csv <clip>.csv --policy-steps N --duration T
+  ```
+- **结果**:
+  - **§40 回归**:官方 sample CSV 的 86 帧,旧路径与 provider 路径的 encoder input
+    (10×64)与 tokenizer terms 最大绝对差 **恰好 0.0**
+  - **跨实现**:bridge 编码的包由 SONIC 侧 `StreamingReferenceProvider` 解码,数值一致
+  - **M6(短测 300 步)**:`fall=false`、root z **1.0733 m**、RMSE(29) **0.05365** ——
+    与 CSV 模式逐项相同(root z 1.0733 / RMSE 0.05365)
+  - **M6(耐久 10800 步 = 216 s 参考)**:`fall=false`、root z 1.0696、RMSE 0.156、
+    publisher 7167 帧 @49.8 Hz、`rejected=0`
+- **关键修复(重要)**:
+  - **joint 顺序**:`A3_REFERENCE_V1` 的 `joint_pos/vel` 必须是 **encoder(URDF/IsaacLab,
+    `dof_il`)顺序**,它是 CSV/MJCF policy 顺序的一个**真置换**(29 个同名关节,
+    顺序完全不同)。第一版按 policy 顺序发布,policy 输出饱和到 `|action|=20`、
+    机器人走飞并倒地。
+    - `tools/inspect_a3_contract.py` 现在按名字从 URDF 推导 `il_joint_names` 与两个
+      index map(BFS 顺序与 `load_urdf_actuated_joints` 完全一致)并断言互为逆置换
+    - `transport/protocol.py` 上线前做置换,header 打 `joint_order: a3_il_v1` 并携带
+      关节名;解码端校验并逆置换
+    - SONIC 侧 provider 拒绝未打标签的包
+  - `replay_reference.py` 实测稳定 **50.0 Hz**(500 帧 / 10 s)
+- **已知问题**:
+  - `--batch-once` 下 MuJoCo 循环不受实时时钟约束(约 1.5× 实时),因此部分 policy step
+    会复用同一个最新窗口;这不影响稳定性验收,但 M7(实时 PICO)需要真实时基。
+- **下一阶段**: commit 19(实时 PICO → UMR online → MuJoCo,需要 PICO 硬件)、
+  commit 20/21(benchmark / 故障注入)
+
+
 
 
 

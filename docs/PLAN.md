@@ -66,10 +66,10 @@
 | 13 | `OnlineUMRRetargeter`(correspondence 只初始化一次 + warm start) | 单帧 step 无重复建图;记录 iterations/ms/cost | ⏸ |
 | 14 | `a3/predictor.py`(One Euro + 常速外推 + 四元数指数映射) | 静止/匀速/限幅 3 组单测 | ⏸ |
 | 15 | `transport/protocol.py` `A3_REFERENCE_V1` + publisher/subscriber | msgpack 二进制,latest-only,roundtrip 单测 | ⏸ |
-| 16 | `apps/replay_reference.py` | 离线轨迹 50Hz 模拟发布 | ⏸ |
-| 17 | sonic_for_a3:`ReferenceProvider` 抽象(Csv/Streaming) | **回归测试**:新旧 obs `assert_allclose` | ⏸ |
-| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | ⏸ |
-| 19 | **M7**:live PICO → UMR online → A3-fast → MuJoCo | 首批受限动作通过 | ⏸ |
+| 16 | `apps/replay_reference.py` | 离线轨迹 50Hz 模拟发布 | ✅ 实测 50.0 Hz |
+| 17 | sonic_for_a3:`ReferenceProvider` 抽象(Csv/Streaming) | **回归测试**:新旧 obs 最大差 0.0 | ✅ 301d4f1 |
+| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | 🔄 短测+耐久已过,5min 进行中 |
+| 19 | **M7**:live PICO → UMR online → A3-fast → MuJoCo | 首批受限动作通过 | ⏸ 需 PICO 硬件(离线替代:M5 已过) |
 | 20 | `tools/benchmark_latency.py` → `benchmarks/4090_live.json` | P50/P90/P95/P99/MAX 分项 | ⏸ |
 | 21 | **M8**:故障注入 + watchdog(HOLD/INVALID/SAFE_STOP) | 断流/NaN/越界/乱序/延迟 全部安全降级 | ⏸ |
 
