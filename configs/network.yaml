@@ -9,7 +9,7 @@ reference:
 pico:
   bind_host: 0.0.0.0
   connect_host: 127.0.0.1
-  port: 5561
+  port: 5556
   comment: upstream SONIC PICO streamer (configs/teleop.yaml holds its topic contract)
 zmq:
   high_water_mark: 1

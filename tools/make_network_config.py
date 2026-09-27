@@ -17,7 +17,7 @@ OUT = BRIDGE_ROOT / "configs" / "network.yaml"
 # The SONIC PICO streamer publishes SMPL frames on its own ZMQ port; keep the
 # bridge reference port separate so both can run side by side.
 REFERENCE_PORT = 5560
-PICO_PORT = 5561
+PICO_PORT = 5556
 
 doc = {
     "schema": "a3_network/v1",

@@ -1,5 +1,8 @@
 # a3_bringup.md — A3 真机 bring-up(严格按序,任一级失败即停)
 
+> **完整可复制命令见 [`A3_ONBOARD.md`](A3_ONBOARD.md)**;本文是原则与背景说明。
+
+
 > 前置条件:`docs/safety.md` 全部满足;MuJoCo 全链路已连续 10 分钟稳定。
 
 ## 0. 上机前

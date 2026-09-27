@@ -157,6 +157,38 @@ $A3WS/UMR/.venv_umr/bin/python -m a3_teleop_bridge.apps.retarget_live \
 > 同一台机器上策略与 UMR 抢 CPU 会把 p95 拉到 200 ms 以上,真机按方案 §22–24
 > 把 UMR 放到 Orin 即可消除。
 
+## 部署与迁移到真机(Orin + A3 机载)
+
+交付一个包、两台机器、两条手册:
+
+```bash
+# 1) 在 4090 上打包(16 MB,含 MANIFEST 与 sha256)
+bash scripts/package_bundle.sh --with-umr
+# 2) 传到 Orin 并解包
+bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz --host <ORIN_IP>
+```
+
+| 手册 | 内容 |
+| --- | --- |
+| [`docs/DEPLOY_ORIN.md`](docs/DEPLOY_ORIN.md) | Orin 全流程:预检 → 环境重建 → SMPL-X 手工拷贝 → 就绪门禁(16 项)→ 网络 → PICO+UMR live → MuJoCo 消费端验证 → 长跑/故障注入 → fallback |
+| [`docs/A3_ONBOARD.md`](docs/A3_ONBOARD.md) | A3 机载:交叉编译 rockchip 包 → 传输 → MDU 服务配置(agent-only)→ receive-only probe → 接入 `A3_REFERENCE_V1` → 悬吊 10 级动作 → 安全降级 |
+
+脚本一览(全部 `--help` 可用):
+
+```text
+scripts/env_orin.sh              导出 A3WS/SONIC_A3_ROOT/UMR_ROOT/PY_*/端点
+scripts/package_bundle.sh        打包(排除 venv/权重/SMPL-X/生成文件)
+scripts/sync_to_orin.sh          rsync + 远端解包
+scripts/orin_preflight.sh        系统/依赖/zmq 自检 → orin_system_info/
+scripts/orin_bootstrap.sh        重建 aarch64 环境(--check-only 可先dry run)
+scripts/check_orin_ready.sh      上机门禁:16 项(含 online UMR 真解一帧)
+scripts/run_orin_live.sh         Orin 侧:PICO → online UMR → publisher
+scripts/run_mujoco_consumer.sh   4090 侧:消费 Orin 的流跑 SONIC sim2sim
+```
+
+> PICO 端口是 **5556**(不是 5561):`pico_pose_zmq_minimal.py` 与 GR00T
+> `pico_manager_thread_server.py` 的默认值都是 5556,本仓库配置已对齐。
+
 ## Mode D — 实时 PICO → A3(需要 PICO 4 / XRoboToolkit + A3 真机)
 
 ```bash

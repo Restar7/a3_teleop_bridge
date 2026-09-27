@@ -126,7 +126,7 @@ class PicoFrame:
 class TeleopConfig:
     topic: str = "pose"
     connect_host: str = "127.0.0.1"
-    port: int = 5561
+    port: int = 5556
     recv_timeout_ms: int = 50
     conflate: bool = True
     high_water_mark: int = 1
@@ -144,7 +144,7 @@ class TeleopConfig:
         return cls(
             topic=str(pico.get("topic", "pose")),
             connect_host=str(pico.get("connect_host", "127.0.0.1")),
-            port=int(pico.get("port", 5561)),
+            port=int(pico.get("port", 5556)),
             recv_timeout_ms=int(zmq_doc.get("recv_timeout_ms", 50)),
             conflate=bool(zmq_doc.get("conflate", True)),
             high_water_mark=int(zmq_doc.get("high_water_mark", 1)),

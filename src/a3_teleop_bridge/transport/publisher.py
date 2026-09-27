@@ -30,7 +30,7 @@ class NetworkConfig:
     bind_host: str = "0.0.0.0"
     connect_host: str = "127.0.0.1"
     reference_port: int = 5560
-    pico_port: int = 5561
+    pico_port: int = 5556
     high_water_mark: int = 1
     conflate: bool = True
     recv_timeout_ms: int = 50
@@ -50,7 +50,7 @@ class NetworkConfig:
             bind_host=str(reference.get("bind_host", "0.0.0.0")),
             connect_host=str(reference.get("connect_host", "127.0.0.1")),
             reference_port=int(reference.get("port", 5560)),
-            pico_port=int(pico.get("port", 5561)),
+            pico_port=int(pico.get("port", 5556)),
             high_water_mark=int(zmq_doc.get("high_water_mark", 1)),
             conflate=bool(zmq_doc.get("conflate", True)),
             recv_timeout_ms=int(zmq_doc.get("recv_timeout_ms", 50)),

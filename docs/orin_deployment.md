@@ -1,5 +1,8 @@
 # orin_deployment.md — Orin 迁移(V1:Orin 只做参考,policy 仍在 A3)
 
+> **完整可复制命令见 [`DEPLOY_ORIN.md`](DEPLOY_ORIN.md)**;本文是原则与背景说明。
+
+
 > 方案 §52–§56、§88:**不要**第一阶段就把 policy 搬到 Orin;Orin 只跑
 > PICO / SMPL / UMR / predictor 并把 `A3_REFERENCE_V1` 发给 A3 原装计算板。
 

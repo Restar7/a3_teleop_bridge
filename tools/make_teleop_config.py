@@ -20,7 +20,7 @@ doc = {
     "pico": {
         "topic": "pose",
         "connect_host": "127.0.0.1",
-        "port": 5561,
+        "port": 5556,
         "source": "gear_sonic/scripts/pico_pose_zmq_minimal.py",
         "format": "topic + 1280-byte JSON header + concatenated binary fields",
         "version": 3,
