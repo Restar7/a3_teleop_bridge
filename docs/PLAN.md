@@ -56,8 +56,8 @@
 | --- | --- | --- | --- |
 | 09 | `pico/zmq_subscriber.py` | 订阅 SONIC ZMQ,校验 (24,3)/(21,3),统计丢帧 | ⏸ |
 | 10 | `pico/recorder.py` + `apps/record_pico.py` | 录制 npz + metadata + stats | ⏸ |
-| 11 | `umr/source_adapter.py` + root orientation 策略 | 四元数连续性、hip+shoulder 朝向社会 | ⏸ |
-| 12 | **M5**:recorded PICO → UMR → A3 → MuJoCo | 离线全链路复现 | ⏸ |
+| 11 | `umr/source_adapter.py` + root orientation 策略 | 四元数连续性、hip+shoulder 朝向社会 | ✅ 8 tests |
+| 12 | **M5**:recorded PICO → UMR → A3 → MuJoCo | 离线全链路复现 | ✅ 4/4 PASS |
 
 ### 阶段 D — 在线化与网络
 
