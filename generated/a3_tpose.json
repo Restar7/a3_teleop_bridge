@@ -1,0 +1,202 @@
+{
+  "schema": "a3_tpose/v1",
+  "generated_by": "tools/build_a3_tpose.py",
+  "mjcf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+  "method": "bounded least-squares over shoulder pitch/roll/yaw + elbow per side, objective = arm axis along \u00b1Y with straight elbow; legs/head fixed at the model neutral pose",
+  "tpose_qpos": {
+    "head_pitch_joint": 0.0,
+    "head_yaw_joint": 0.0,
+    "left_ankle_pitch_joint": 0.0,
+    "left_ankle_roll_joint": 0.0,
+    "left_elbow_joint": 1.49225651,
+    "left_hip_pitch_joint": 0.0,
+    "left_hip_roll_joint": 0.0,
+    "left_hip_yaw_joint": 0.0,
+    "left_knee_joint": 0.0,
+    "left_shoulder_pitch_joint": 0.0,
+    "left_shoulder_roll_joint": 1.548979711,
+    "left_shoulder_yaw_joint": 0.0,
+    "right_ankle_pitch_joint": 0.0,
+    "right_ankle_roll_joint": 0.0,
+    "right_elbow_joint": 1.49225651,
+    "right_hip_pitch_joint": 0.0,
+    "right_hip_roll_joint": 0.0,
+    "right_hip_yaw_joint": 0.0,
+    "right_knee_joint": 0.0,
+    "right_shoulder_pitch_joint": 0.0,
+    "right_shoulder_roll_joint": -1.548979711,
+    "right_shoulder_yaw_joint": 0.0
+  },
+  "zero_pose_bodies": {
+    "left": {
+      "shoulder": [
+        0.0103,
+        0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow": [
+        0.020300000000000006,
+        0.21700048695819568,
+        0.01396019144207708
+      ],
+      "wrist": [
+        0.14930000000000007,
+        0.21700048695819568,
+        0.003960191442077075
+      ]
+    },
+    "right": {
+      "shoulder": [
+        0.0103,
+        -0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow": [
+        0.020300000000000006,
+        -0.21700048695819568,
+        0.01346019144207708
+      ],
+      "wrist": [
+        0.14930000000000007,
+        -0.21700048695819568,
+        0.003460191442077074
+      ]
+    }
+  },
+  "arms": {
+    "left": {
+      "angles": {
+        "left_shoulder_pitch_joint": 0.0,
+        "left_shoulder_roll_joint": 1.5489797111449675,
+        "left_shoulder_yaw_joint": 0.0,
+        "left_elbow_joint": 1.4922565104551517
+      },
+      "lateral_fraction": 0.9996894549139862,
+      "vertical_error_m": 0.001066891523448743,
+      "forward_error_m": 0.01015205001156073,
+      "straightness_deg": 2.844204483718138,
+      "arm_length_m": 0.40963486195047955,
+      "shoulder_pos": [
+        0.0103,
+        0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow_pos": [
+        0.020300000000000002,
+        0.4871520033909159,
+        0.2978496439031992
+      ],
+      "wrist_pos": [
+        0.02045205001156073,
+        0.616508139814926,
+        0.29502708296552593
+      ],
+      "ok": true
+    },
+    "right": {
+      "angles": {
+        "right_shoulder_pitch_joint": 0.0,
+        "right_shoulder_roll_joint": -1.5489797111449675,
+        "right_shoulder_yaw_joint": 0.0,
+        "right_elbow_joint": 1.4922565104551517
+      },
+      "lateral_fraction": 0.9996902801372746,
+      "vertical_error_m": 0.001055984080931438,
+      "forward_error_m": 0.01015205001156073,
+      "straightness_deg": 2.8390598885325895,
+      "arm_length_m": 0.41013455969010615,
+      "shoulder_pos": [
+        0.0103,
+        -0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow_pos": [
+        0.020300000000000002,
+        -0.48765188440445584,
+        0.2978387364606819
+      ],
+      "wrist_pos": [
+        0.02045205001156073,
+        -0.617008020828466,
+        0.29501617552300863
+      ],
+      "ok": true
+    }
+  },
+  "legs": {
+    "pose": "model zero (straight)",
+    "hip_knee_ankle_deg": 179.99979321750342,
+    "pelvis_z_m": 0.0,
+    "hip_z_m": -0.22247581938175534,
+    "knee_z_m": -0.5924758193817553,
+    "ankle_z_m": -1.0074758193817552
+  },
+  "tolerances": {
+    "horizontal_m": 0.02,
+    "lateral_fraction": 0.98,
+    "straightness_deg": 3.0000000000000004
+  },
+  "roundtrip": {
+    "left": {
+      "lateral_fraction": 0.9996894549139862,
+      "vertical_error_m": 0.001066891523448743,
+      "forward_error_m": 0.01015205001156073,
+      "straightness_deg": 2.844204483718138,
+      "arm_length_m": 0.40963486195047955,
+      "shoulder_pos": [
+        0.0103,
+        0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow_pos": [
+        0.020300000000000002,
+        0.4871520033909159,
+        0.2978496439031992
+      ],
+      "wrist_pos": [
+        0.02045205001156073,
+        0.616508139814926,
+        0.29502708296552593
+      ],
+      "ok": true
+    },
+    "right": {
+      "lateral_fraction": 0.9996902801372746,
+      "vertical_error_m": 0.001055984080931438,
+      "forward_error_m": 0.01015205001156073,
+      "straightness_deg": 2.8390598885325895,
+      "arm_length_m": 0.41013455969010615,
+      "shoulder_pos": [
+        0.0103,
+        -0.20700048695819567,
+        0.2939601914420772
+      ],
+      "elbow_pos": [
+        0.020300000000000002,
+        -0.48765188440445584,
+        0.2978387364606819
+      ],
+      "wrist_pos": [
+        0.02045205001156073,
+        -0.617008020828466,
+        0.29501617552300863
+      ],
+      "ok": true
+    }
+  },
+  "excluded_joints": {
+    "head": [
+      "head_yaw_joint",
+      "head_pitch_joint"
+    ],
+    "passive_foot": [
+      "left_foot_forefoot_joint",
+      "left_foot_toe_joint",
+      "right_foot_forefoot_joint",
+      "right_foot_toe_joint"
+    ],
+    "note": "head kept neutral in UMR qpos but stripped from the A3 policy reference"
+  },
+  "acceptable": true,
+  "problems": []
+}
