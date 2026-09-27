@@ -63,9 +63,23 @@ root z          1.0733 m      1.0733 m
 RMSE(29)        0.05365       0.05365
 ```
 
-耐久(`logs/m6_endurance_5min/`):18000 policy step(= 360 s 参考),
-`fall=false`,root z 1.0696,RMSE 0.1558,publisher 7004 帧 @49.9 Hz,
-`rejected=0`。
+耐久(连续 cross-fade 参考,`logs/m6_endurance_final/`):
+
+```text
+policy steps   16000(= 320 s policy 时间)
+wall clock     265 s
+fall           false
+root z         mean 1.0694 m
+RMSE(29)       0.1596
+publisher      13296 帧 @ 49.97 Hz,rejected=0,seq 单调(13296)
+参考窗口        skipped_no_state=0(从未发出占位窗口)
+```
+
+耐久测试中定位并修复的 3 个问题(详见 `progress.md`):
+`--batch-once` 无实时基 → 新增 `--realtime`;循环播放重置 seq 且发占位窗口 →
+不再重置、不发 DISCONNECTED 窗口;直接拼接动作造成参考跳变 → 用
+`tools/make_endurance_clip.py` 做 20 帧 cross-fade(最大关节步进 0.087 rad,
+root 0.0014 m)。
 
 方案 §40 回归:官方 sample CSV 的 86 帧,旧路径 vs provider 路径的 encoder input
 (10×64)最大绝对差 **0.0**。

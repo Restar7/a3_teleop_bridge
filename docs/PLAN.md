@@ -68,21 +68,21 @@
 | 15 | `transport/protocol.py` `A3_REFERENCE_V1` + publisher/subscriber | msgpack 二进制,latest-only,roundtrip 单测 | ⏸ |
 | 16 | `apps/replay_reference.py` | 离线轨迹 50Hz 模拟发布 | ✅ 实测 50.0 Hz |
 | 17 | sonic_for_a3:`ReferenceProvider` 抽象(Csv/Streaming) | **回归测试**:新旧 obs 最大差 0.0 | ✅ 301d4f1 |
-| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | 🔄 短测+耐久已过,5min 进行中 |
+| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | ✅ 16000 步 / 265 s / fall=false / rejected=0 |
 | 19 | **M7**:live PICO → UMR online → A3-fast → MuJoCo | 首批受限动作通过 | ⏸ 需 PICO 硬件(离线替代:M5 已过) |
-| 20 | `tools/benchmark_latency.py` → `benchmarks/4090_live.json` | P50/P90/P95/P99/MAX 分项 | ⏸ |
-| 21 | **M8**:故障注入 + watchdog(HOLD/INVALID/SAFE_STOP) | 断流/NaN/越界/乱序/延迟 全部安全降级 | ⏸ |
+| 20 | `tools/benchmark_latency.py` → `benchmarks/4090_live.json` | P50/P90/P95/P99/MAX 分项 | ✅ UMR 36 Hz,桥接 <1 ms |
+| 21 | **M8**:故障注入 + watchdog(HOLD/INVALID/SAFE_STOP) | 断流/NaN/越界/乱序/延迟 全部安全降级 | ✅ 13 项故障注入测试 |
 
 ### 阶段 E — 迁移与真机
 
 | commit | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| 22 | Orin 打包 + `ORIN_BLOCKER.md` 机制 | **M9**:Orin 上 UMR/reference 可运行 | ⛔ 需 Orin 硬件 |
-| 23 | A3 C++ `StreamingReferenceProvider` + watchdog | 与 Python 端字节级同协议 | ⏸ 可先写好+单测 |
+| 22 | Orin 打包 + `ORIN_BLOCKER.md` 机制 | **M9**:Orin 上 UMR/reference 可运行 | 📄 文档+模板就绪,执行需 Orin |
+| 23 | A3 C++ `StreamingReferenceProvider` + watchdog | 与 Python 端字节级同协议 | ✅ 16 项 C++ 检查通过 |
 | 24 | receive-only bring-up | **M10**:不 publish motor command | ⛔ 需 A3 真机 |
 | 25 | 悬吊真机测试(10 级动作顺序) | **M11** | ⛔ 需 A3 真机 + 安全员 |
-| 26 | camera adapter(独立进程) | 不进入 50Hz loop | ⏸ |
-| 27 | V2 TensorRT parity | **M12** 之后 | ⏸ |
+| 26 | camera adapter(独立进程) | 不进入 50Hz loop | 📄 接口文档就绪,需 A3 实际相机栈 |
+| 27 | V2 TensorRT parity | **M12** 之后 | 📄 放在 Orin/V2 阶段 |
 
 ---
 
