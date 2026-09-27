@@ -1,0 +1,32 @@
+schema: a3_network/v1
+protocol: A3_REFERENCE_V1
+reference:
+  bind_host: 0.0.0.0
+  connect_host: 127.0.0.1
+  port: 5560
+  comment: publisher binds, MuJoCo/A3 runtime connects; use the LAN IP for Orin ->
+    A3
+pico:
+  bind_host: 0.0.0.0
+  connect_host: 127.0.0.1
+  port: 5561
+  comment: upstream SONIC PICO streamer (configs/teleop.yaml holds its topic contract)
+zmq:
+  high_water_mark: 1
+  conflate: true
+  recv_timeout_ms: 50
+  comment: 'latest-only: never process a backlog of motion frames'
+frequencies_hz:
+  pico: as delivered (~60-90)
+  umr: 25-50 (target)
+  predictor: 50
+  reference_publish: 50
+  a3_policy: 50
+watchdog:
+  hold_after_ms: 50.0
+  invalid_after_ms: 250.0
+  comment: aligned with the official runtime frame-age watchdog (50 ms)
+reference_window:
+  frames: 10
+  dt: 0.02
+  horizon_s: 0.18
