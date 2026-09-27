@@ -1,0 +1,73 @@
+{
+  "frames": 3945,
+  "dt": 0.03333333333333333,
+  "problems": [
+    "feet_not_crossed: min heading-frame separation -0.269 m at frame 920; 172 frames below -0.02 m"
+  ],
+  "checks": {
+    "finite": {
+      "ok": true,
+      "detail": "all arrays finite"
+    },
+    "root_height_band": {
+      "ok": true,
+      "detail": "root z in [0.600, 1.207] m"
+    },
+    "root_no_teleport": {
+      "ok": true,
+      "detail": "max per-frame root step 0.063 m"
+    },
+    "root_quat_unit": {
+      "ok": true,
+      "detail": "|quat| in [1.000000, 1.000000]"
+    },
+    "joint_limits": {
+      "ok": true,
+      "detail": "worst limit excess 1.457e-08 rad"
+    },
+    "left_knee_joint_direction": {
+      "ok": true,
+      "detail": "knee range [+0.097, +2.338] rad (negative = reverse knee)"
+    },
+    "right_knee_joint_direction": {
+      "ok": true,
+      "detail": "knee range [+0.204, +2.479] rad (negative = reverse knee)"
+    },
+    "shoulder_roll_joint_mirror": {
+      "ok": true,
+      "detail": "mean left +0.826 vs right -0.763 rad"
+    },
+    "hip_roll_joint_mirror": {
+      "ok": true,
+      "detail": "mean left +0.082 vs right -0.133 rad"
+    },
+    "ankle_roll_joint_mirror": {
+      "ok": true,
+      "detail": "mean left -0.073 vs right +0.058 rad"
+    },
+    "joint_velocity": {
+      "ok": true,
+      "detail": "max |dq| 10.60 rad/s (hardware max 22.70)"
+    },
+    "joint_acceleration": {
+      "ok": true,
+      "detail": "max |ddq| 333.8 rad/s^2"
+    },
+    "feet_not_crossed": {
+      "ok": false,
+      "detail": "min heading-frame separation -0.269 m at frame 920; 172 frames below -0.02 m"
+    },
+    "feet_above_ground": {
+      "ok": true,
+      "detail": "lowest ankle above ground +0.066 m"
+    }
+  },
+  "velocity_max_rad_s": 10.599796883761883,
+  "acceleration_max_rad_s2": 333.78952592611313,
+  "foot_separation_series_min_frame": 920,
+  "foot_separation_min_m": -0.26915915337737517,
+  "foot_height_min_m": 0.06569985641151915,
+  "foot_height_max_m": 0.39397782474429344,
+  "acceptable": false,
+  "source": "../UMR/output/agibot_a3_retarget/dance1_subject2_smplx_agibot_a3.npz"
+}

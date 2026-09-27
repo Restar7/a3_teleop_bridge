@@ -135,8 +135,10 @@ def main(argv: list[str] | None = None) -> int:
         report["nan_joint_pos"] == 0
         and report["nan_root"] == 0
         and invalid == 0
-        and pos_err < 1e-9
-        and joint_err < 1e-9
+        # the CSV stores centimetres/degrees with 9 significant digits, so a
+        # few nanometres of print precision is expected and harmless
+        and pos_err < 1e-6
+        and joint_err < 1e-6
         and not violations
     )
     report["acceptable"] = acceptable

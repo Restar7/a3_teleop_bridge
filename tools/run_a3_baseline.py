@@ -69,6 +69,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mjcf", default=None)
     parser.add_argument("--policy-steps", type=int, default=None, help="limit policy steps")
     parser.add_argument("--action-delay-ms", type=float, default=0.0)
+    parser.add_argument(
+        "--csv-source-fps",
+        type=float,
+        default=None,
+        help="reference stream fps of the CSV (repository default 30; pass 30 with "
+        "--csv-frame-stride 1 for a native-30fps export)",
+    )
+    parser.add_argument(
+        "--csv-frame-stride",
+        type=int,
+        default=None,
+        help="row stride when sampling the CSV (repository default 4 for the legacy "
+        "120 fps sample files)",
+    )
     parser.add_argument("--output-video", default=None)
     parser.add_argument("--log-dir", default=str(DEFAULT_LOG_DIR))
     parser.add_argument(
@@ -122,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
         cmd += ["--max-policy-steps", str(policy_steps)]
     if args.action_delay_ms:
         cmd += ["--action-delay-ms", str(args.action_delay_ms)]
+    if args.csv_source_fps is not None:
+        cmd += ["--csv-source-fps", str(args.csv_source_fps)]
+    if args.csv_frame_stride is not None:
+        cmd += ["--csv-frame-stride", str(args.csv_frame_stride)]
     if args.output_video:
         cmd += ["--output-video", str(args.output_video)]
 
@@ -194,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         "urdf": str(contract.urdf_path),
         "motion": str(motion),
         "encoder_mode": args.encoder_mode,
+        "csv_source_fps": args.csv_source_fps,
+        "csv_frame_stride": args.csv_frame_stride,
         "policy_hz": contract.policy_hz,
         "policy_dt": contract.policy_dt,
         "reference_window": {

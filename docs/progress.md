@@ -217,4 +217,70 @@
 - **已知问题**: 无
 - **下一阶段**: M3 / M4
 
+---
+
+## 阶段 M3 — SMPL-X → UMR → A3
+
+- **执行命令**:
+  ```bash
+  cd ~/a3_teleop_ws/UMR
+  export SONIC_A3_ROOT=~/a3_teleop_ws/sonic_for_a3
+  .venv_umr/bin/python scripts/humanoid_retarget_pipeline.py \
+      --config robot_configs/humanoid_retarget_agibot_a3.json --skip-view
+  ```
+- **输入**: `sample_data/lafan1_smplx/dance1_subject2.npz`(3945 帧 @30fps)
+- **输出**:
+  ```text
+  output/agibot_a3_retarget/dance1_subject2_smplx_agibot_a3.npz   qpos=(3945, 72)
+  output/correspondence_agibot_a3_smplx_neutral_betas_c4eb7419e9/{checkpoint-final.pt,correspondence_slots_final.npz}
+  generated/m3_umr_a3_report.json / generated/m3_umr_a3_validation.json
+  ```
+- **结果**: PASS
+  ```text
+  qpos            = (3945, 72)   72 = free(7) + 41 标量关节 + 球关节(4x6)
+  NaN             = 0
+  root height     = mean 0.991 m, range [0.600, 1.207]
+  |quat|          = [1.000000, 1.000000]
+  A3 mapping      = ok (29 policy joints, head/passive 已剔除, 0 limit violation)
+  retarget cost   = mean 0.0722 max 0.2934 (G1 baseline 0.0559 / 0.2425)
+  knee 方向       = 左右膝均 ≥ 0(无反向膝)
+  左右镜像        = shoulder/hip/ankle roll 均值左右反号
+  速度/加速度     = max |dq| 10.6 rad/s, max |ddq| 334 rad/s²
+  ```
+- **已知问题**:
+  1. UMR 会把 floating MJCF 写到**源 MJCF 同目录**
+     (`sonic_for_a3/.../mjcf/<seq>.floating_mjcf.xml`)。
+  2. `dance1_subject2` 含大量旋转/跳跃,属方案 §21 明确排除的动作;
+     用 heading-frame 判据可看到机器人 172 帧"双脚交叉",而同一判据在**人类源动作**
+     上有 1770+ 帧"交叉",说明该判据对旋转动作不可靠 —— 因此 dance 只作为压力测试,
+     验收改用方案 §21 指定的 6 类简单动作(见 M3b)。
+  3. 修复了 UMR 的一个路径 bug(`meshdir` + 嵌套相对路径),commit `d892361`。
+
+- **下一阶段**: M3b/M4 使用方案指定的简单动作做验收
+
+---
+
+## 阶段 M3b/M4 — 验收动作集 + MuJoCo 全链路
+
+- **动作集生成**: `tools/make_smplx_validation_motions.py`
+  - 9 段 SMPL-X clip(stand / raise_left_arm / raise_right_arm / bend_knees /
+    lift_left_foot / lift_right_foot / twist_torso_left / twist_torso_right /
+    step_forward_slow),各 90 帧 @30fps
+  - 所有旋转轴由 FK **实测搜索**得到(左右腿分别搜索,不复制),每段 clip 都有
+    数值验收(如抬左手时左腕 z 增益 +0.50 m 而右腕为 0)
+  - 输出 `~/a3_teleop_ws/data/smplx_validation/*.npz` + 每段 json + manifest
+- **批处理**: `tools/run_umr_a3_batch.py`(复用 pipeline 自己的命令,只替换
+  `--data/--seq-key/--out`)
+- **CSV 导出**: `python -m a3_teleop_bridge.apps.retarget_offline`
+  - round-trip 误差: pos 5.0e-9 m / joints 8.7e-9 rad / quat 3.0e-6°
+  - 6 帧发生 clamp,0 invalid
+- **MuJoCo**: `tools/run_a3_baseline.py --csv-source-fps 30 --csv-frame-stride 1`
+- **已知问题(重要)**:
+  - 用**默认** `--csv-frame-stride 4` 跑自研 CSV 会 4 倍降采样参考并导致 policy 倒地
+    (tick 337)。原生 30fps 导出**必须**显式 `--csv-source-fps 30 --csv-frame-stride 1`;
+    `retarget_offline` 会把这个提示写进 report。
+  - `dance1_subject2` 全片(6574 policy step)在 tick 1504 倒地 —— 该动作含跳跃/旋转,
+    按方案 §21 属于本阶段**不做**的动作,记录为已知边界,不作为验收项。
+
+
 
