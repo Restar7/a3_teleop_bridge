@@ -587,3 +587,41 @@
   - `examples/README.md` 汇总了三类示例产物(PICO 录制 / UMR→A3 结果与 CSV /
     参考流录制)及各自的产生命令。
 - **下一阶段**: 剩余可做项已不多;M7 真实头显与 M9–M12 真机/Orin 需硬件
+
+## 阶段 49 / M8 — 10 分钟连续稳定性验收(方案 §49/§84)
+
+- **commit**: 本次记录(代码即 `2910a6c` 之后的当前 HEAD;无新代码改动)
+- **执行命令**:
+  ```bash
+  # 12 分钟动作(12 段验收动作拼接,20 帧交叉淡化,复用 make_endurance_clip.py)
+  python tools/make_endurance_clip.py --repeats 40 --blend-frames 20 \
+      --out ../logs/a3_validation/endurance_12min.csv
+
+  python tools/run_a3_streaming.py --csv ../logs/a3_validation/endurance_12min.csv \
+      --policy-steps 36000 --duration 1100 --port 15692 \
+      --out-dir ../logs/m8_ten_minutes_long
+  ```
+- **输入**: `logs/a3_validation/endurance_12min.csv`(36000 帧 @30 fps)
+- **输出**: `logs/m8_ten_minutes_long/{m6_report,metrics,timeseries,sim2sim.log,publisher.log}`
+- **结果**: **ACCEPTED — 方案 §49「至少 10 分钟」达成**
+  ```text
+  策略步数        36000(= 720 s 策略时间 @50 Hz)
+  墙钟时长        924.0 s(15.4 分钟,连续运行)
+  fall            false
+  root z mean     1.0731 m
+  roll/pitch max  2.611°
+  all-29 RMSE     0.1202 rad(历次最好)
+  publisher       44353 窗口 / 920.6 s = 48.18 Hz,rejected=0
+  receiver        received 35884,rejected 0,dropped 8304(latest-only 设计)
+  消费侧          interpolated 35999(每步都有参考),无 NaN、无积压、无 root 跳变
+  ```
+- **说明**:
+  - 这条是 **M6/M8 的纯 streaming 链路**(trajectory → ZMQ → StreamingReferenceProvider
+    → A3-fast → MuJoCo),不含 PICO/UMR,因此可以在无硬件条件下把「长时间稳定性」
+    这一项彻底做完;online UMR 版本的 60 s 长跑已在 M7 条目记录。
+  - 交叉淡化由 `tools/make_endurance_clip.py` 生成:相邻片段 20 帧混合,
+    最大关节步进 0.0874 rad、root 步进 0.0014 m,因此 12 段拼接不构成参考跳变。
+  - 之前的 30000 步那次实际只跑到 motion 结尾(12000 帧 ≈ 240 s),
+    说明「请求步数 ≠ 实际步数」;`run_live_chain.py` 已改为从 `metrics.json`
+    读实际步数,本次也用 `num_policy_steps` 复核。
+- **下一阶段**: 无硬件可做的验收项已全部完成;M7 真实头显、M9–M12(Orin/A3 真机)待硬件

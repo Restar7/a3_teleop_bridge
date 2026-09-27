@@ -68,10 +68,10 @@
 | 15 | `transport/protocol.py` `A3_REFERENCE_V1` + publisher/subscriber | msgpack 二进制,latest-only,roundtrip 单测 | ✅ 13 tests;encode/decode 0.052/0.094 ms;C++ 端 16 项对拍通过 |
 | 16 | `apps/replay_reference.py` | 离线轨迹 50Hz 模拟发布 | ✅ 实测 50.0 Hz |
 | 17 | sonic_for_a3:`ReferenceProvider` 抽象(Csv/Streaming) | **回归测试**:新旧 obs 最大差 0.0 | ✅ 301d4f1 |
-| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | ✅ 16000 步 / 265 s / fall=false / rejected=0 |
+| 18 | **M6**:trajectory → ZMQ → StreamingReferenceProvider → A3-fast → MuJoCo | 连续 5 分钟无泄漏/无积压/无 NaN | ✅ 16000 步 / 265 s;后扩到 **36000 步 / 924 s** / fall=false / rejected=0 |
 | 19 | **M7**:live PICO → UMR online → A3-fast → MuJoCo | 首批受限动作通过 | 🔄 **recorded PICO → online UMR 全链路 ACCEPTED**(1500/3000 步,fall=false,RMSE 0.177,TRACKING);只差真实 PICO 头显 |
 | 20 | `tools/benchmark_latency.py` → `benchmarks/4090_live.json` | P50/P90/P95/P99/MAX 分项 | ✅ UMR online 20 Hz(离线批量 36 Hz),桥接 <1 ms |
-| 21 | **M8**:故障注入 + watchdog(HOLD/INVALID/SAFE_STOP) | 断流/NaN/越界/乱序/延迟 全部安全降级 | ✅ 13 项故障注入测试 |
+| 21 | **M8**:故障注入 + watchdog(HOLD/INVALID/SAFE_STOP) | 断流/NaN/越界/乱序/延迟 全部安全降级 | ✅ 13 项故障注入测试;**§49 十分钟长跑 36000 步 / 924 s / fall=false / RMSE 0.1202** |
 
 ### 阶段 E — 迁移与真机
 
