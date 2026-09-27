@@ -22,6 +22,6 @@ dev = ["pytest>=7.0"]
 where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "integration"]
 pythonpath = ["src"]
 addopts = "-q"
