@@ -511,3 +511,50 @@
   - 未跑真实 PICO(M7 剩余部分),M9–M12 仍需 Orin/A3 硬件。
 - **下一阶段**: M7(真实 PICO)或继续 §46 的预测器/ V2 TensorRT parity(commit 27)
 
+
+## 阶段 M7(除头显外全部打通)— recorded PICO → **online UMR** → A3-fast → MuJoCo
+
+- **commit**: `7897e2c`(recording 源 + online backend 接入链路)、`3e42dbd`(标定修复)
+- **执行命令**:
+  ```bash
+  # 新增:录制 PICO 直接驱动 online UMR(不需要头显)
+  UMR/.venv_umr/bin/python tools/run_live_chain.py \
+      --csv logs/a3_validation/endurance_loop.csv --csv-fps 30 \
+      --recording recordings/m5_twist_torso_left \
+      --policy-steps 1500 --duration 90 --port 15664 \
+      --out-dir logs/live_chain_umr_calib
+  ```
+- **输入**: `recordings/m5_twist_torso_left`(recorded PICO,SMPL-X 真人体帧,循环播放)
+  + SONIC 官方 `035_step200000` + A3-fast + MuJoCo
+- **输出**: `logs/live_chain_umr_calib/{live_chain_report,pipeline_stats,metrics,timeseries}.json`
+- **结果**: **ACCEPTED — M7 的整条架构已用真实 online UMR 求解器跑通**
+
+  | 项 | 标定版(1500 步) | 长跑版(3000 步,无标定) |
+  | --- | --- | --- |
+  | fall | **false** | **false** |
+  | root z mean | 1.0711 m | 1.0710 m |
+  | all-29 RMSE | 0.177 rad | 0.178 rad |
+  | 求解器 p50 / p95 / max | **37.5 / 63.6 / 202.7 ms** | 59.9 / 277 / 400 ms |
+  | 发布窗口 | 843(输入 1934) | 1381(输入 7500) |
+  | rejected | 0 | 0 |
+  | 状态机 | DISCONNECTED → **TRACKING**(2 次转移) | CALIBRATION ↔ HOLD 抖动 |
+
+  SONIC 侧 `stream_stats`(标定版):received 707、dropped 26、jumps 65、
+  max_gap 2961 ms、interpolated 1499、rejected 0 —— 即参考流按 20–25 Hz 更新、
+  策略按 50 Hz 消费时,差值全部由既有有界插值补齐,机器人未倒。
+- **修掉的两个真实缺陷**:
+  1. `--source recording` **从来自动标定不生效**(条件只写了 `trajectory`),
+     状态机因为没有 calibration 永远停在 CALIBRATION。修复后
+     `auto-calibrated: yaw_off=+0.000 rad scale=0.670 left_right_ok=True`,
+     状态机进入 **TRACKING**。
+  2. `run_live_chain.py` 打印的是 `--policy-steps` 请求值,而不是策略真正跑的步数:
+     第一次用 `m5_twist_torso_left.csv`(约 3 s)当 motion 时只跑了 149 步却报 1500。
+     现在从 `metrics.json` 读实际步数。
+- **已知问题 / 下一步优化**:
+  - 长跑版的求解器 p50 从 37.5 ms 涨到 59.9 ms、p95 到 277 ms:同一台机器上
+    SONIC 策略(50 Hz,torch)与 UMR(SMPL-X + Clarabel,CPU)抢 CPU 所致,
+    属于宿主资源竞争,不是算法回归。方案 §22–24 的部署形态本来就是
+    UMR/参考流放 **Orin**、策略放 4090,迁移后可消除该竞争(M9 待硬件)。
+  - 记录片段只有约 3 s,循环播放会在片段边界产生参考跳变(stream jumps 65);
+    真机 M7 用真实连续数据不会有这个问题。
+  - 尚未执行:真实 PICO 4 头显(M7 最后一步)、M9–M12(需 Orin/A3 硬件)。

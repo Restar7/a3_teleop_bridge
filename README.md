@@ -121,6 +121,42 @@ python gear_sonic/scripts/sim2sim_a3_mujoco.py \
 
 (上面的 `--mjcf` 请使用仓库默认值;示例里写全路径只是为了说明可覆盖。)
 
+## Mode C.5 — recorded PICO → **online UMR** → ZMQ → A3-fast → MuJoCo(M7 除头显外)
+
+与 Mode C 同一条实时链路,但参考不再来自回放,而是**真实 online UMR 求解器**
+逐帧解算 recorded PICO 的人体帧。这是 M7 在没有头显时能验证的全部内容。
+
+```bash
+cd $A3WS/a3_teleop_bridge
+source ../env.sh          # 需要 SONIC_A3_ROOT 等环境变量
+# online UMR 会话需要一次性装配(约 15 s),故默认先等 25 s 再启动策略
+$A3WS/UMR/.venv_umr/bin/python tools/run_live_chain.py \
+    --csv $A3WS/logs/a3_validation/endurance_loop.csv --csv-fps 30 \
+    --recording $A3WS/recordings/m5_twist_torso_left \
+    --policy-steps 1500 --duration 90 --port 15664 \
+    --out-dir $A3WS/logs/live_chain_umr_calib
+# => fall=false, root z 1.071 m, RMSE 0.177 rad, states DISCONNECTED→TRACKING,
+#    求解器 p50 37.5 ms, rejected=0
+```
+
+可用录制片段:`recordings/m5_{stand,step_forward_slow,twist_torso_left,lift_left_foot}`。
+
+只跑参考侧(不启 MuJoCo)时:
+
+```bash
+$A3WS/UMR/.venv_umr/bin/python -m a3_teleop_bridge.apps.retarget_live \
+    --source recording --backend umr-online \
+    --recording $A3WS/recordings/m5_twist_torso_left \
+    --duration 8 --no-publish --playback-hz 30 --stats /tmp/online.json
+# => frames in=240 solved=182, solver 38.7 ms, rejected=0
+```
+
+> **注意**:online UMR 单帧 ≈ 40–60 ms(20–25 Hz),低于离线批量的 36 Hz;
+> 参考流是 latest-only,策略按 50 Hz 消费,缺口由 SONIC 侧有界插值补齐
+> (上面长跑 3000 步:interpolated 1499、rejected 0、未倒)。
+> 同一台机器上策略与 UMR 抢 CPU 会把 p95 拉到 200 ms 以上,真机按方案 §22–24
+> 把 UMR 放到 Orin 即可消除。
+
 ## Mode D — 实时 PICO → A3(需要 PICO 4 / XRoboToolkit + A3 真机)
 
 ```bash
