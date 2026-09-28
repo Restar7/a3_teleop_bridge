@@ -10,13 +10,14 @@ instead of dying halfway.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 BRIDGE_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = {
-    "run_pico_sim.sh": ["--check", "--replay", "--duration", "--policy-steps"],
+    "run_pico_sim.sh": ["--check", "--replay", "--duration", "--policy-steps", "--no-viewer"],
     "run_robot_live.sh": ["--check", "--a3-host", "--confirm-live", "--duration"],
 }
 
@@ -109,3 +110,39 @@ def test_stream_stats_parser_survives_python_none():
     assert module.parse_stream_stats("") == {}
     assert module.parse_stream_stats("[reference-stream] {not a dict}") == {}
     assert module.parse_stream_stats("[reference-stream] {'received': 7, 'last_seq': 42}")["last_seq"] == 42
+
+
+def test_live_chain_exposes_a_viewer_mode():
+    """The teleoperation entry point must be able to show the MuJoCo window.
+
+    sim2sim disables the passive viewer under --batch-once, so "show me the
+    robot" means omitting that flag; run_live_chain.py grew --viewer for it.
+    """
+    module = _live_chain_module()
+    proc = subprocess.run(
+        [sys.executable, str(BRIDGE_ROOT / "tools" / "run_live_chain.py"), "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "--viewer" in proc.stdout
+    source = (BRIDGE_ROOT / "tools" / "run_live_chain.py").read_text(encoding="utf-8")
+    # headless is the default (acceptance runs), and the flag is what drops batch mode
+    assert 'if not args.viewer:' in source and 'sim_cmd.append("--batch-once")' in source
+    # and it must degrade instead of crashing when there is no display
+    assert "WAYLAND_DISPLAY" in source
+
+
+def test_pico_sim_defaults_to_the_viewer():
+    source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "VIEWER=1" in source, "the manual teleop entry point should show the window by default"
+    assert "--no-viewer" in source
+    assert "Space pause" in source, "controls should be echoed to the operator"
+
+
+def test_pico_sim_checks_the_pc_service_port():
+    """Headset-only setups cannot work: the SDK talks to localhost:60061."""
+    source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "60061" in source
+    assert "/opt/apps/roboticsservice/runService.sh" in source
+    assert "the headset alone is not enough" in source

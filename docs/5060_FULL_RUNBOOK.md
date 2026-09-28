@@ -627,11 +627,30 @@ bash scripts/check_orin_ready.sh      # 期望 16 ok, 0 failed(零配置)
 
 ```bash
 cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
-bash scripts/run_pico_sim.sh                 # 直接开始遥操
+bash scripts/run_pico_sim.sh                 # 直接开始遥操(MuJoCo 窗口默认打开)
 bash scripts/run_pico_sim.sh --check         # 只自检,不起进程
 bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
 bash scripts/run_pico_sim.sh --replay $A3WS/recordings/all/m5_twist_torso_left   # 没头显也能验链路
+bash scripts/run_pico_sim.sh --no-viewer     # 无显示环境/CI:跑批处理模式
 ```
+
+**MuJoCo 窗口(默认开)**
+
+```text
+Space        暂停/继续
+. / →        暂停时单步前进一个 policy 帧
+, / ←        回退一个参考帧并重置仿真
+= / -        下一个 / 上一个动作片段
+R            重置到当前片段第 0 帧
+关掉窗口      结束本次运行
+```
+
+窗口里机器人是实时的,**半透明的"参考影子"**叠在上面(来自参考流),所以你能直接看出
+策略跟没跟上。窗口模式与 `--batch-once` 批处理模式**写同样的 metrics**,
+`fall` / `root z` / `RMSE(29)` 一样可比;需要无人值守时用 `--no-viewer`。
+
+> 没有显示的环境(纯 ssh/CI)会自动回落到批处理:脚本检测 `DISPLAY`/`WAYLAND_DISPLAY`,
+> 缺了就打印 `--viewer requested but no DISPLAY/WAYLAND_DISPLAY; running headless`。
 
 这一条命令内部起了**两个**进程,并在退出时一起收掉:
 

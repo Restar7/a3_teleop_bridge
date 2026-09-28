@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -117,6 +118,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "live_chain"))
     parser.add_argument(
+        "--viewer",
+        action="store_true",
+        help="open the MuJoCo passive viewer window instead of running headless. "
+        "Needs a display (X11/Wayland); Space pauses, './,' step, ',' rewinds, "
+        "'R' resets, closing the window stops the run.  Metrics are written the "
+        "same way either way.",
+    )
+    parser.add_argument(
         "--sim-python",
         default=None,
         help="interpreter with mujoco+torch for the SONIC sim2sim consumer "
@@ -180,7 +189,6 @@ def main(argv: list[str] | None = None) -> int:
         "stream",
         "--reference-endpoint",
         endpoint,
-        "--batch-once",
         "--realtime",
         "--max-policy-steps",
         str(args.policy_steps),
@@ -189,6 +197,18 @@ def main(argv: list[str] | None = None) -> int:
         "--timeseries-out",
         str(out_dir / "timeseries.json"),
     ]
+    # --batch-once explicitly turns the passive viewer off ("batch mode: run each
+    # CSV once without the passive viewer"), so the interactive path simply omits
+    # it.  Both paths stop at the end of the reference and both write metrics, so
+    # the acceptance numbers stay comparable; the viewer just adds Space/./,/R
+    # controls and a window you can close to stop.
+    if not args.viewer:
+        sim_cmd.append("--batch-once")
+    viewer = bool(args.viewer)
+    if viewer and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print("[live-chain] --viewer requested but no DISPLAY/WAYLAND_DISPLAY; running headless")
+        viewer = False
+    print(f"[live-chain] sim mode: {'MuJoCo viewer window' if viewer else 'headless (batch-once)'}")
     started = time.time()
     with (out_dir / "sim2sim.log").open("w", encoding="utf-8") as log:
         proc = subprocess.run(sim_cmd, cwd=str(contract.sonic_root), stdout=log, stderr=subprocess.STDOUT)

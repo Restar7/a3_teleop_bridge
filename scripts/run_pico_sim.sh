@@ -4,6 +4,7 @@
 #   bash scripts/run_pico_sim.sh                 # live headset teleoperation in sim
 #   bash scripts/run_pico_sim.sh --check         # preflight only, start nothing
 #   bash scripts/run_pico_sim.sh --replay DIR    # no headset: drive from a recording
+#   bash scripts/run_pico_sim.sh --no-viewer     # headless (CI / no display)
 #   bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
 #
 # This starts BOTH halves and tears them down together:
@@ -35,12 +36,15 @@ PICO_PORT=5556
 REPLAY=""
 CHECK_ONLY=0
 OUT_DIR=""
+VIEWER=1
 
 usage() { sed -n '2,24p' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
+    --viewer) VIEWER=1; shift ;;
+    --no-viewer) VIEWER=0; shift ;;
     --replay) REPLAY="$2"; shift 2 ;;
     --duration) DURATION="$2"; shift 2 ;;
     --policy-steps) POLICY_STEPS="$2"; shift 2 ;;
@@ -236,6 +240,13 @@ if [ -n "$REPLAY" ]; then
   CHAIN=(--recording "$REPLAY")
 else
   CHAIN=(--pico)
+fi
+if [ "$VIEWER" = 1 ]; then
+  CHAIN+=(--viewer)
+  echo "[run] MuJoCo window: ON   (Space pause, '.' step, ',' rewind, 'R' reset, close window to stop)"
+  echo "      headless: add --no-viewer"
+else
+  echo "[run] MuJoCo window: OFF (headless)"
 fi
 
 set +e
