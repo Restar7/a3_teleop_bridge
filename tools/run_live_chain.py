@@ -125,6 +125,14 @@ def main(argv: list[str] | None = None) -> int:
         "tools/report_live_dump.py",
     )
     parser.add_argument(
+        "--reference-startup-wait-s",
+        type=float,
+        default=90.0,
+        help="how long the simulator may hold its startup pose before giving up "
+        "on the first reference packet (default 90 s; the bridge needs ~15 s to "
+        "assemble plus its first calibration frames)",
+    )
+    parser.add_argument(
         "--viewer",
         action="store_true",
         help="open the MuJoCo passive viewer window instead of running headless. "
@@ -181,8 +189,40 @@ def main(argv: list[str] | None = None) -> int:
     live_log = (out_dir / "retarget_live.log").open("w", encoding="utf-8")
     live = subprocess.Popen(live_cmd, cwd=str(BRIDGE_ROOT), stdout=live_log, stderr=subprocess.STDOUT)
     print(f"[live-chain] retarget_live started (pid {live.pid}) on {endpoint}")
-    wait = args.startup_wait if args.startup_wait is not None else (25.0 if online_umr else 2.5)
-    time.sleep(wait)
+    # Wait until the bridge is really publishing instead of guessing a delay.
+    # A fixed 25 s was not enough on a real headset: the online UMR session needs
+    # ~15 s to assemble and the auto-calibration then needs its first frames, so
+    # the simulator could start after the bridge had already gone quiet and then
+    # spend its whole 30 s startup window waiting for packets that never came.
+    stats_path = out_dir / "pipeline_stats.json"
+    if args.startup_wait is not None:
+        wait = float(args.startup_wait)
+        print(f"[live-chain] waiting {wait:.0f}s for the bridge (explicit --startup-wait)")
+        time.sleep(wait)
+    elif online_umr:
+        budget = float(os.environ.get("A3_STARTUP_BUDGET_S", "150"))
+        print(f"[live-chain] waiting for the first published reference (up to {budget:.0f}s)")
+        waited, published = 0.0, 0
+        while waited < budget:
+            time.sleep(1.0)
+            waited += 1.0
+            if live.poll() is not None:
+                break
+            try:
+                published = int(json.loads(stats_path.read_text()).get("frames_published", 0))
+            except Exception:
+                published = 0
+            if published > 0:
+                break
+            if int(waited) % 10 == 0:
+                print(f"[live-chain]   still waiting ({waited:.0f}s, published={published})")
+        if published > 0:
+            print(f"[live-chain] bridge is publishing ({published} frames after {waited:.0f}s)")
+        else:
+            print(f"[live-chain] WARNING: nothing published after {waited:.0f}s -- starting the "
+                  f"simulator anyway; it will hold its startup pose and say why")
+    else:
+        time.sleep(2.5)
 
     sim_cmd = [
         str(sim_python),
@@ -203,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
         "stream",
         "--reference-endpoint",
         endpoint,
+        "--reference-startup-wait-s",
+        str(args.reference_startup_wait_s),
         "--realtime",
         "--max-policy-steps",
         str(args.policy_steps),

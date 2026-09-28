@@ -1129,6 +1129,35 @@ $PY_BRIDGE tools/report_live_dump.py $A3WS/logs/sim_teleop/<时间戳>/live_fram
 # 不带参数则自动找最新一份
 ```
 
+### 17.6.1 仿真报 `no A3_REFERENCE_V1 packet received yet` / `sim2sim exited with 1`
+
+**2026-09-28 实测踩到**。真实时间线:
+
+```text
+22:07:03  bridge 开始求解
+22:07:15  bridge 最后一帧          ← 之后 40 秒不再出帧
+22:07:21  仿真才启动(run_live_chain 固定等 25 s)
+22:07:51  仿真等满它的 30 s 启动窗口 → RuntimeError → exit 1
+```
+
+`run_live_chain.py` 原来**猜一个固定 25 秒**就启动仿真。真头显下 bridge 要先装配 online UMR
+(~15 s)、再做自动标定(还要一批帧),所以仿真可能在 bridge 已经安静下来之后才开始,
+然后干等一个永远不会来的包。
+
+**现在改成等它真的开始发**(读 `pipeline_stats.json` 的 `frames_published`,每秒轮询):
+
+```text
+[live-chain] waiting for the first published reference (up to 150s)
+[live-chain] bridge is publishing (27 frames after 8s)      ← 实测 8 秒
+```
+
+同时把仿真的启动等待从 30 s 提到 **90 s**(`--reference-startup-wait-s`),
+两边都不再靠猜。`A3_STARTUP_BUDGET_S` 可调等待上限。
+
+> 另外:真头显下 bridge 的**收包率**明显低于发送端的发包率(实测 bridge ~6 Hz vs 发送端 ~29 Hz)
+> —— solver 每帧 ~50 ms,仿真 GUI 一起来 CPU 竞争更重,接收线程会被饿到。
+> 如果看到 `frames_published` 长期不涨,先试 `--no-viewer`(关掉 MuJoCo 窗口)再看。
+
 ### 17.7 「腿不动」怎么定位(一分钟,两种原因)
 
 先排除**链路**:同一段腿部动作走三条路径,结果几乎一样,而且**离线那条(已验收)还更差**:

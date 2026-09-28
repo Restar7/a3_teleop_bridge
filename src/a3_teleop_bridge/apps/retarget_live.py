@@ -255,10 +255,46 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"[live] source={args.source} backend={args.backend} duration={args.duration:g}s "
           f"playback={args.playback_hz:g} Hz publish={bool(publisher)}")
+    def write_stats() -> None:
+        if not args.stats:
+            return
+        out = Path(args.stats).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "frames_in": pipeline.stats.frames_in,
+            "frames_solved": pipeline.stats.frames_solved,
+            "frames_published": pipeline.stats.frames_published,
+            "rejected": pipeline.stats.rejected,
+            "state_history": [name for name, _ in pipeline.state_history],
+            "wall_s": time.time() - started,
+        }
+        out.write_text(json.dumps(payload, indent=2, default=float) + "\n", encoding="utf-8")
+
+    def run_with_progress() -> None:
+        """``run_for`` plus a periodic stats flush.
+
+        The MuJoCo side starts by *reading this file* to know when the bridge is
+        really publishing, instead of guessing a fixed delay -- a guess that made
+        the simulator wait 30 s for packets that were never coming.
+        """
+        period = 1.0
+        deadline = time.perf_counter() + float(args.duration)
+        last = 0.0
+        while time.perf_counter() < deadline and not pipeline._stop.is_set():
+            frame = provider()
+            if frame is None:
+                time.sleep(0.001)
+            else:
+                pipeline.submit(frame)
+            now = time.time()
+            if now - last >= period:
+                write_stats()
+                last = now
+
     started = time.time()
     try:
         pipeline.start()
-        pipeline.run_for(provider, duration_s=args.duration)
+        run_with_progress()
         time.sleep(0.3)
     except KeyboardInterrupt:
         print("\n[live] interrupted")
