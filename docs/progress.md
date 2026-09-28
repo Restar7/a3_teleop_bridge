@@ -966,3 +966,94 @@ python -m a3_teleop_bridge.apps.retarget_live --source recording --backend umr-o
 
 - **下一阶段**: 无硬件可做的部分已全部完成;剩余为 PICO 头显 / AimSim / 真机
   (§7/§8/§11),需硬件在场。上机前按 `GO_LIVE_CHECKLIST.md` A→G 执行。
+
+---
+
+## 阶段 M5c — 膝屈曲缺陷:**已定位并修复**(UMR 膝姿态先验)
+
+- **时间**: 2026-09-28(第二轮,用户选择方案 P1)
+- **commit**: UMR `84d3650`(实现先验)+ `086d46c`(抽出共享 helper);本条记录
+
+### 根因(在 UMR solver 内部实测定位,不是推断)
+
+在 solver 里临时插桩(`A3_KNEE_DEBUG`,**已完全回退**,脚本与备份逐字节相同)后测到:
+
+1. **代价函数本身就偏爱伸膝 → 不是优化器的问题。** 用 `joint_limits` 把膝钉死在不同角度、
+   读求解器**自己报告**的 cost:膝 0.00→0.0192、0.15→0.0239、0.30→0.0296、0.45→0.0364、
+   0.60→0.0443、0.90→0.0650,单调递增 ⇒ 膝=0 就是该目标的约束最优解。
+2. **是谁把膝顶住:foot 的 point term。** `bend_knees` 最深帧(97 帧)扫左膝并按部位分解:
+   Δ膝 +0.20 时总 cost 20.89→26.91,其中 **leftFoot 3.17→9.28**,而 leftLeg(小腿)
+   反而 **1.83→1.72**(屈膝改善了小腿匹配)。
+3. **为什么"屈膝反而让脚更远"。** 该帧目标左脚中心在机器人脚**上方 90 mm、后方 87 mm**;
+   目标到髋距离 0.7867 m 比当前完全伸展的腿 0.8286 m **短 4.2 cm**(目标确实要求折叠变短)。
+   但求解器收敛的姿态是"整条腿向后扫 ~22° + 膝伸直";在该姿态下屈膝把脚扫向**前下方**,
+   正好背离"后上方"的目标 ⇒ point 目标的最优解就是"hip pitch 扫腿 + 膝停在伸展限位"。
+   无约束 IK 能精确命中但需膝 −0.64 rad(超伸,模型不允许)+ `hip_yaw` +0.59 rad(34° 扭转)。
+
+**结论:膝不是坏了,是"没人管"——目标函数里完全没有膝姿态信息**;UMR 里唯一的关节空间
+先验开关 `--joint_map_cost` 是 **dead code**(声明了、代码从未使用)。correspondence 本身正常,
+**不需要重建**(修正了上一轮"要重建 500 epoch"的猜测)。
+
+### 修复(UMR `solver.joint_map_cost`,权重 600)
+
+逐帧测源骨架膝屈曲(大腿-小腿夹角),并在模型上**实测**机器人自己的
+`内角 = 180.00 − 57.30 × 膝角`(度)线性映射,把源膝角映射为机器人膝角目标,
+每膝加一行 `sqrt(cost)·(q_knee − target)` 单位残差。权重 0 时行为与修复前完全一致。
+
+**标定依据**:A3 自己的 MJCF **keyframe(标称站姿)膝角 = +0.2515 rad(14.4°)**,
+源 `stand` 的内角 165.3° vs keyframe 165.59° —— 几乎相同。修复前的 0.0000 意味着
+**腿比机器人自己的标称站姿还直**。
+
+| clip | 膝角修前 | 膝角修后 | 源目标 | RMSE vs 源 | corr |
+| --- | --- | --- | --- | --- | --- |
+| stand | [0.00, 0.00] | [0.24, 0.24] | [0.26, 0.26] | 0.012 | — |
+| bend_knees | [0.00, 0.00] | [0.24, 0.80] | [0.25, 0.88] | 0.060 | **+1.00** |
+| lift_left_foot | [0.00, 0.00] | [0.24, 0.81] | [0.25, 0.88] | 0.055 | **+1.00** |
+| step_forward_slow | [0.00, 0.00] | [0.24, 0.47] | [0.25, 0.51] | 0.035 | **+1.00** |
+
+### 验收(全部复跑)
+
+```bash
+python tools/run_a3_validation_suite.py --data-dir $A3WS/UMR/output/a3_pico_all \
+  --out-dir $A3WS/logs/a3_validation_all_nomj --skip-mujoco            → 9/9 PASS
+... --out-dir $A3WS/logs/a3_validation_mujoco_smoke --only m5_twist_torso_left --policy-steps 100
+                                                                       → 1/1 PASS
+... --out-dir $A3WS/logs/a3_validation_mujoco_full                     → 9/9 PASS(全 fall=false)
+python -m pytest tests integration -q                                  → 181 passed, 13 skipped
+online UMR(recorded PICO)  rejected=0, solver p50 42.8 / p95 75.6 ms
+tools/run_live_chain.py --recording ...  → ACCEPTED, published 795, fall=false, p50 36.0 ms
+```
+
+MuJoCo 逐 clip 对比(修前 → 修后 RMSE):
+
+| clip | 修前 | 修后 | root z |
+| --- | --- | --- | --- |
+| bend_knees | 0.1436 | **0.1219** | 1.0571 → **1.0044**(真的蹲下去了;roll/pitch 7.27°→3.46°) |
+| stand | 0.0568 | **0.0489** | 1.0727 → 1.0703 |
+| twist_torso_left | 0.0647 | **0.0526** | |
+| twist_torso_right | 0.0665 | **0.0538** | |
+| raise_left_arm | 0.0893 | **0.0720** | |
+| raise_right_arm | 0.1028 | **0.0837** | |
+| lift_right_foot | 0.0986 | 0.1066 | |
+| step_forward_slow | 0.0934 | 0.1036 | |
+| lift_left_foot | 0.1050 | 0.1383 | |
+
+5 个改善、4 个变差(最大 +0.033)、**无一摔倒**。
+
+### 过程中处理的两个坑
+
+1. **在线路径必须同步**:online session 有自己的逐帧求解循环,最初没接上先验 —— 会导致
+   "离线数据弯膝、现场遥操仍塌膝"。已把 `knee_posture_targets` 拆成
+   `source_knee_interior_deg` + `robot_knee_interior_calibration` 供两边共用,
+   并在 `umr_session.py` 接上;实测 online 膝角 0.244–0.274 rad(与离线 0.24 一致)。
+   延迟基本不变(p50 42.8 vs 修前 40.4 ms)。
+2. **`*.floating_mjcf.xml` 是每个 clip 共享、每次 retarget 覆写的产物**:探针曾把它覆盖,
+   导致 1 个 clip 读不出来。已用原配置重新生成并确认 npz **逐字节相同**。
+
+### 回归防护
+
+`tests/test_validate_a3_motion.py::test_bend_knees_actually_flexes_the_knee`
+—— 断言 `bend_knees` 膝行程 > 0.40 rad、中立位 ≈0.2515 rad(与 A3 keyframe 一致)、
+下蹲峰值 > 0.70 rad。若先验失效,这个测试会红,而不是让验收静默通过。
+
+- **下一阶段**: 无硬件可做部分已全部完成;剩余 PICO 头显 / AimSim / 真机(§7/§8/§11)。

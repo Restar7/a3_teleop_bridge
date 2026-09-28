@@ -172,6 +172,44 @@ class UmrRetargetSession:
         self.smpl_slot_name = prepared["smpl_slot_name"]
         self.center_mode = prepared["center_mode"]
         self.robot_xml = prepared["robot_xml"]
+        # Knee posture prior (UMR ``solver.joint_map_cost``).  The offline loop
+        # wires this in solve_sequence; the online session drives
+        # solve_frame_body_segment_qp itself, so without this the live reference
+        # would silently keep the collapsed-knee behaviour the offline run just
+        # fixed.  Calibrated once from the model, applied per frame.
+        self._knee_prior = None
+        _prior_cost = float(getattr(args, "joint_map_cost", 0.0) or 0.0)
+        if _prior_cost > 0.0:
+            try:
+                import mujoco as _mj
+
+                knee_adrs, knee_dofs, knee_ranges = [], [], []
+                for _side in ("left", "right"):
+                    _jid = _mj.mj_name2id(self.model, _mj.mjtObj.mjOBJ_JOINT, f"{_side}_knee_joint")
+                    if _jid < 0:
+                        raise ValueError(f"{_side}_knee_joint not in the model")
+                    knee_adrs.append(int(self.model.jnt_qposadr[_jid]))
+                    knee_dofs.append(int(self.model.jnt_dofadr[_jid]))
+                    knee_ranges.append(self.model.jnt_range[_jid])
+                _calib = module.robot_knee_interior_calibration(
+                    self.model,
+                    self.data,
+                    "left_hip_pitch_Link",
+                    "left_knee_Link",
+                    "left_ankle_roll_Link",
+                    knee_adrs[0],
+                )
+                if _calib is not None:
+                    self._knee_prior = {
+                        "cost": _prior_cost,
+                        "calib": _calib,
+                        "adrs": knee_adrs,
+                        "dofs": knee_dofs,
+                        "ranges": knee_ranges,
+                    }
+            except Exception as exc:  # pragma: no cover - defensive
+                self._knee_prior = None
+                print(f"[umr-online][WARN] knee posture prior disabled: {exc}")
         # NOTE: filled in below, *after* the slot part labels exist. The offline
         # pipeline samples a bounded number of slots per body segment
         # (``sample_segment_slots``); feeding all 4096 correspondence slots to
@@ -272,6 +310,16 @@ class UmrRetargetSession:
             else int(args.iters)
         )
         solve_started = time.perf_counter()
+        if self._knee_prior is not None:
+            args._joint_prior_cost = float(self._knee_prior["cost"])
+            _intercept, _slope = self._knee_prior["calib"]
+            _interior = module.source_knee_interior_deg(joints, self.source_joint_names)
+            _rows = []
+            for _i, (_adr, _dof) in enumerate(zip(self._knee_prior["adrs"], self._knee_prior["dofs"])):
+                _lo, _hi = self._knee_prior["ranges"][_i]
+                _target = (float(_interior[_i]) - _intercept) / _slope
+                _rows.append((_adr, _dof, float(np.clip(_target, _lo, _hi))))
+            args._joint_prior_rows = _rows
         q_opt, cost = module.solve_frame_body_segment_qp(
             self.model,
             self.data,

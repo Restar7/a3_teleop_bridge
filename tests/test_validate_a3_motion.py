@@ -314,3 +314,28 @@ def test_all_nine_acceptance_clips_pass():
         if not report["acceptable"]:
             failures.append(f"{path.stem}: {report['problems']}")
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.skipif(
+    not REAL_CLIP_DIR.is_dir(), reason="acceptance npz set not present on this machine"
+)
+def test_bend_knees_actually_flexes_the_knee():
+    """Regression guard for the collapsed-knee defect.
+
+    The retarget's point-matching objective left the knee unconstrained, so
+    every clip sat on the extension stop (knee 0.0000 rad) while the source bent
+    the knees 36-43 deg.  UMR's ``solver.joint_map_cost`` knee posture prior
+    fixes it; if it ever regresses, this fails instead of the acceptance suite
+    quietly staying green.
+    """
+    from a3_teleop_bridge.umr.offline import load_umr_result
+
+    names = list(validator.load_contract().policy_joint_names)
+    result = load_umr_result(REAL_CLIP_DIR / "m5_bend_knees_smplx_agibot_a3.npz")
+    knee = np.asarray([result.joint_value(i, "left_knee_joint") for i in range(result.n_frames)])
+    excursion = float(knee.max() - knee.min())
+    assert excursion > 0.40, f"knee only moved {excursion:.4f} rad -- posture prior missing?"
+    # the A3's own MJCF keyframe stands at knee +0.2515 rad, and the source's
+    # stand clip matches it, so the neutral must sit near that, not at 0
+    assert knee.min() == pytest.approx(0.2515, abs=0.06), f"neutral knee {knee.min():+.4f}"
+    assert knee.max() > 0.70, f"crouch knee only reached {knee.max():+.4f} rad"
