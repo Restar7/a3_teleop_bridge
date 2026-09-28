@@ -36,8 +36,10 @@ WS = BRIDGE_ROOT.parent
 PAIRS = [
     ("L_knee_interior_deg", "ref_left_knee_joint", True),
     ("R_knee_interior_deg", "ref_right_knee_joint", True),
-    ("L_thigh_tilt_deg", "ref_left_hip_pitch_joint", False),
-    ("R_thigh_tilt_deg", "ref_right_hip_pitch_joint", False),
+    # thigh tilt is deliberately NOT compared: it is measured on the source
+    # skeleton, whose frame in the online session is not the one a "tilt from
+    # vertical" needs, and reading it the wrong way round produced a warning on a
+    # perfectly standing clip. The reference's own hip pitch is used instead.
 ]
 
 
@@ -92,6 +94,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{src:24s} {s_span_deg:10.2f}d {r_span:11.4f}r {ratio:7.2f}  "
               f"{'1:1 expected' if exact else 'informational (tilt includes pelvis)'}")
         verdict.append((src, ref, s_span_deg, r_span, ratio, exact))
+
+    # ---- does the reference stay inside what the policy can actually hold? ----
+    # A reference can be a perfect copy of the operator and still put the robot on
+    # the floor: A3-fast cannot balance on one leg, so a high leg lift (the
+    # runbook forbids "large single-leg standing") ends in a fall with root_err
+    # growing past a metre while every ratio above reads 1.00.
+    # Use the *reference's own* hip pitch: it is in the robot's frame, so unlike any
+    # angle measured on the source skeleton it cannot be read the wrong way round.
+    swings = []
+    for side in ("left", "right"):
+        vals = [r.get(f"ref_{side}_hip_pitch_joint") for r in rows
+                if r.get(f"ref_{side}_hip_pitch_joint") is not None]
+        if vals:
+            swings.append((side, max(abs(v) for v in vals)))
+    print()
+    print("reference leg swing (the policy's envelope, not the pipeline's):")
+    for side, peak in swings:
+        flag = "  <-- swung far past a balanced stance" if peak > 0.9 else ""
+        print(f"  {side} hip pitch: peak |q| {peak:5.2f} rad ({peak * 57.2958:5.1f} deg){flag}")
+    if any(peak > 0.9 for _side, peak in swings):
+        print("  WARNING: the reference swings a hip past ~50 deg. A3-fast cannot balance")
+        print("           through that (the runbook forbids large single-leg standing), so")
+        print("           expect a fall even though every ratio below reads 1.00.")
 
     print()
     moved = [v for v in verdict if v[2] >= args.min_move_deg]

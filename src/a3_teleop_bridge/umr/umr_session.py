@@ -740,11 +740,19 @@ def _leg_angles_from_joints(joints) -> dict:
             _np.degrees(_np.arccos(_np.clip(cosang, -1.0, 1.0)))
         )
         out[f"{side}_hip_to_ankle_m"] = float(_np.linalg.norm(h - a))
-        # hip pitch: sagittal tilt of the thigh away from straight down
+        # thigh tilt away from straight down: knee - hip, so 0 deg = vertical
+        # (using hip - knee points up and reports ~180 for a standing leg)
         down = _np.array([0.0, 0.0, -1.0])
+        thigh_down = k - h
         out[f"{side}_thigh_tilt_deg"] = float(
             _np.degrees(
-                _np.arccos(_np.clip(_np.dot(thigh / max(float(_np.linalg.norm(thigh)), 1e-12), down), -1.0, 1.0))
+                _np.arccos(
+                    _np.clip(
+                        _np.dot(thigh_down / max(float(_np.linalg.norm(thigh_down)), 1e-12), down),
+                        -1.0,
+                        1.0,
+                    )
+                )
             )
         )
     return out

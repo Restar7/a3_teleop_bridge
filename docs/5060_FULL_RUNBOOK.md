@@ -1256,6 +1256,41 @@ $PY_BRIDGE tools/report_live_dump.py $A3WS/logs/sim_teleop/<时间戳>/live_fram
 
 ---
 
+### 17.6.2 参考是对的,但机器人还是倒了 —— 看「参考腿摆幅」
+
+**2026-09-28 实测**。两次真头显运行,链路指标都完美:
+
+```text
+Run A(--no-viewer)  源膝  9.16°  → 参考 0.1599 rad  ratio 1.00   ← 但 fall @ tick 51
+Run B(开窗口)       源膝112.41°  → 参考 1.9671 rad  ratio 1.00
+```
+
+Run A 倒地时 `root_err → 1.73 m`,而**源动作几乎没有膝变化**。真相在髋角上:
+
+```text
+f  5   ref_L_hip = -0.354
+f 60   ref_L_hip = -0.932
+f 80   ref_L_hip = -1.261     ← 髋摆了 72°
+```
+
+也就是说**操作者把一条腿抬到了接近水平**。参考如实跟了(ratio 1.00),
+但 **A3-fast 撑不住单腿大摆**——这正是 §7.3 明令禁止的「大幅单腿站立」。
+
+**报告现在会直接警告这一步**(用参考自身的髋角,机器人坐标系,不会读反):
+
+```text
+reference leg swing (the policy's envelope, not the pipeline's):
+  left hip pitch: peak |q|  1.31 rad ( 75.3 deg)  <-- swung far past a balanced stance
+  WARNING: the reference swings a hip past ~50 deg. A3-fast cannot balance
+           through that (the runbook forbids large single-leg standing), so
+           expect a fall even though every ratio below reads 1.00.
+```
+
+站立动作下同一项是 `0.36 rad (20.7°)`,不会误报。
+
+> **判据**:`ratio` 全 1.00 只证明**参考忠实**;能不能站住要看**腿摆幅**。
+> 髋角峰值超过约 **0.9 rad(50°)** 就会倒。做动作时把抬腿控制在 50° 以内。
+
 ### 17.7 「腿不动」怎么定位(一分钟,两种原因)
 
 先排除**链路**:同一段腿部动作走三条路径,结果几乎一样,而且**离线那条(已验收)还更差**:
