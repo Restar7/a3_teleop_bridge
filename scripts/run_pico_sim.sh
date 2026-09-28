@@ -210,6 +210,26 @@ OUT_DIR="${OUT_DIR:-$WS_ROOT/logs/sim_teleop/$(date +%Y%m%d_%H%M%S)}"
 mkdir -p "$OUT_DIR"
 echo "[run] out-dir: $OUT_DIR"
 
+# ---- startup snapshot: everything needed to reproduce a diagnosis later ----
+{
+  echo "=== when ==="; date -Is
+  echo "=== host ==="; hostname; uname -a; echo "LAN_IP=$LAN_IP"
+  echo "=== git ==="
+  for r in "$BRIDGE_ROOT" "$UMR_ROOT" "$SONIC_ROOT"; do
+    printf '%-46s %s  %s  dirty=%s\n' "$r" \
+      "$(git -C "$r" rev-parse --abbrev-ref HEAD 2>/dev/null)" \
+      "$(git -C "$r" rev-parse --short HEAD 2>/dev/null)" \
+      "$(git -C "$r" status --porcelain 2>/dev/null | wc -l)"
+  done
+  echo "=== interpreters ==="
+  for py in "$PY_BRIDGE" "$PY_UMR" "$PY_SIM" "$PY_PICO"; do
+    printf '%-52s ' "$py"
+    "$py" -c "import sys;print(sys.version.split()[0])" 2>/dev/null || echo MISSING
+  done
+  echo "=== mode ==="; echo "mode=$MODE viewer=$VIEWER pico_fps=$PICO_FPS port=$PORT pico_port=$PICO_PORT"
+} > "$OUT_DIR/startup_info.txt" 2>&1
+echo "[run] startup snapshot: $OUT_DIR/startup_info.txt"
+
 SENDER_PID=""
 cleanup() {
   if [ -n "$SENDER_PID" ] && kill -0 "$SENDER_PID" 2>/dev/null; then
@@ -295,6 +315,16 @@ rc=$?
 set -e
 
 echo "--------------------------------------------------------------"
+DUMP="$OUT_DIR/live_frames.jsonl"
+if [ -f "$DUMP" ] && [ -f "$BRIDGE_ROOT/tools/report_live_dump.py" ]; then
+  echo "[report] 源动作 → 参考(哪一层丢的动作,看这里)"
+  "$PY_BRIDGE" "$BRIDGE_ROOT/tools/report_live_dump.py" "$DUMP" 2>&1 | sed 's/^/  /' || true
+  echo
+  echo "[report] 头显原始数据(腿不动时,先看是不是头显没跟踪)"
+  echo "  戴着眼镜跑: \$A3WS/sonic_for_a3/.venv_pico_minimal/bin/python \\"
+  echo "      $BRIDGE_ROOT/tools/probe_pico_body.py --seconds 15 --expect legs"
+  echo
+fi
 echo "[done] exit=$rc  logs: $OUT_DIR"
 echo "       pico sender : $OUT_DIR/pico_sender.log"
 echo "       reference   : $OUT_DIR/retarget_live.log"

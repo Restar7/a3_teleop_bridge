@@ -94,7 +94,11 @@ def make_frame_provider(args, recording=None):
 
 def build_backend(args):
     if args.backend == "umr-online":
-        backend = UmrOnlineBackend(robot_config=args.robot_config, verbose=args.verbose)
+        backend = UmrOnlineBackend(
+            robot_config=args.robot_config,
+            verbose=args.verbose,
+            dump_frames=getattr(args, "dump_frames", None),
+        )
         backend.initialize()
         return backend
     if args.umr_result:
@@ -139,6 +143,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--endpoint", default=None)
     parser.add_argument("--calibration", default=None, help="calibration.json to load")
     parser.add_argument("--save-calibration", default=None)
+    parser.add_argument(
+        "--dump-frames",
+        default=None,
+        help="write a JSONL of per-frame diagnostics (source leg angles + the "
+        "reference joint values it produced); see tools/report_live_dump.py",
+    )
     parser.add_argument("--stats", default=None, help="write pipeline stats JSON here")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -254,6 +264,10 @@ def main(argv: list[str] | None = None) -> int:
         print("\n[live] interrupted")
     finally:
         pipeline.stop()
+        _backend = getattr(pipeline, "backend", None)
+        _session = getattr(_backend, "session", None)
+        if _session is not None and hasattr(_session, "close"):
+            _session.close()
         if subscriber is not None:
             subscriber.close()
         if publisher is not None:

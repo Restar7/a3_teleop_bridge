@@ -1088,7 +1088,48 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 
 **第一次跑之前先看 §17.4 的自检清单**(对几条就能判断修复有没有生效);§17.5 是 2026-09-28 这轮「按现象查根因」的完整对照表。
 
-### 17.6 「腿不动」怎么定位(一分钟,两种原因)
+### 17.6 一条命令拿到全链路诊断(腿不动 / 走路不动时先跑这个)
+
+`run_pico_sim.sh` 现在**跑完会自动打印四层诊断**,并且把启动时的全部信息写进
+`startup_info.txt`(三个仓库的 commit + dirty、解释器版本、LAN IP、模式/端口):
+
+```text
+$A3WS/logs/sim_teleop/<时间戳>/
+   startup_info.txt      启动快照:git SHA/解释器/IP/模式
+   pico_sender.log       发送端(头显数据)
+   retarget_live.log     参考侧
+   sim2sim.log           MuJoCo/策略
+   live_frames.jsonl     逐帧:源腿角度 vs 它产出的参考关节值
+   metrics.json          fall / root z / RMSE
+```
+
+跑完终端底部会直接出现:
+
+```text
+[report] 源动作 → 参考(哪一层丢的动作,看这里)
+  source signal                 source    reference   ratio  note
+  L_knee_interior_deg           36.06d      0.5768r    0.92  1:1 expected
+  R_knee_interior_deg           43.01d      0.6986r    0.93  1:1 expected
+  VERDICT: OK -- the source's leg motion reaches the reference at comparable amplitude
+```
+
+判读(**`ratio` 是「源动了 1 rad,参考跟着动多少」**,已经做过度→弧度换算):
+
+| VERDICT | 含义 | 下一步 |
+| --- | --- | --- |
+| `SOURCE_STATIC` | 源就没动 → **头显/发送端没把腿送出来** | 跑下面的 `probe_pico_body.py` |
+| `REFERENCE_STATIC` | 源动了、参考没动 | retarget bug,把表发我 |
+| `REFERENCE_WEAK` | 参考跟了但幅度差很多 | 同样是 retarget 侧 |
+| `OK` | **参考没问题**,剩下的在头显输入或策略 | 见 §17.7 |
+
+想单独重跑报告:
+
+```bash
+$PY_BRIDGE tools/report_live_dump.py $A3WS/logs/sim_teleop/<时间戳>/live_frames.jsonl
+# 不带参数则自动找最新一份
+```
+
+### 17.7 「腿不动」怎么定位(一分钟,两种原因)
 
 先排除**链路**:同一段腿部动作走三条路径,结果几乎一样,而且**离线那条(已验收)还更差**:
 

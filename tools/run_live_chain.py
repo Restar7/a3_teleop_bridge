@@ -118,6 +118,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "live_chain"))
     parser.add_argument(
+        "--dump-frames",
+        default=None,
+        help="write a per-frame JSONL of the online session's diagnostics "
+        "(source leg angles vs the reference joints it produced); analyse with "
+        "tools/report_live_dump.py",
+    )
+    parser.add_argument(
         "--viewer",
         action="store_true",
         help="open the MuJoCo passive viewer window instead of running headless. "
@@ -161,12 +168,19 @@ def main(argv: list[str] | None = None) -> int:
         "--stats",
         str(out_dir / "pipeline_stats.json"),
     ]
+    online_umr = bool(args.pico or args.recording)
     if args.recording:
         live_cmd += ["--recording", str(Path(args.recording).expanduser())]
+    dump_path = args.dump_frames
+    if dump_path is None and os.environ.get("A3_LIVE_DUMP"):
+        dump_path = os.environ["A3_LIVE_DUMP"]
+    if dump_path is None and online_umr:
+        dump_path = str(out_dir / "live_frames.jsonl")
+    if dump_path:
+        live_cmd += ["--dump-frames", str(dump_path)]
     live_log = (out_dir / "retarget_live.log").open("w", encoding="utf-8")
     live = subprocess.Popen(live_cmd, cwd=str(BRIDGE_ROOT), stdout=live_log, stderr=subprocess.STDOUT)
     print(f"[live-chain] retarget_live started (pid {live.pid}) on {endpoint}")
-    online_umr = bool(args.pico or args.recording)
     wait = args.startup_wait if args.startup_wait is not None else (25.0 if online_umr else 2.5)
     time.sleep(wait)
 

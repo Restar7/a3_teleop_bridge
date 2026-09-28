@@ -132,7 +132,9 @@ class UmrOnlineBackend:
         python: Path | str | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        dump_frames: Path | str | None = None,
     ) -> None:
+        self.dump_frames = Path(dump_frames).expanduser() if dump_frames else None
         self.robot_config = Path(robot_config).expanduser() if robot_config else None
         self.umr_root = Path(umr_root).expanduser() if umr_root else None
         self.python = Path(python).expanduser() if python else None
@@ -161,6 +163,7 @@ class UmrOnlineBackend:
             umr_root=self.umr_root,
             device=self.device,
             verbose=self.verbose,
+            dump_frames=self.dump_frames,
         )
         self.session.initialize()
 

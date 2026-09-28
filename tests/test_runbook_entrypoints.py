@@ -270,3 +270,22 @@ def test_pico_body_probe_separates_headset_from_pipeline():
         assert marker in source
     # the XR layout matters: the leg joints are the last block before Root
     assert "LeftUpLeg" in source and "RightToe" in source
+
+
+def test_live_frame_dump_and_report():
+    """One command must produce a source-vs-reference verdict for the live path."""
+    report = BRIDGE_ROOT / "tools" / "report_live_dump.py"
+    assert report.is_file()
+    proc = subprocess.run([sys.executable, str(report), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    text = report.read_text(encoding="utf-8")
+    for marker in ("SOURCE_STATIC", "REFERENCE_STATIC", "REFERENCE_WEAK", "VERDICT: OK"):
+        assert marker in text
+    # the degrees->radians conversion is the whole point: without it a working
+    # pipeline reads as "0.02x, the reference barely moves"
+    assert "np.radians" in text
+
+    chain = (BRIDGE_ROOT / "tools" / "run_live_chain.py").read_text(encoding="utf-8")
+    assert "--dump-frames" in chain and "live_frames.jsonl" in chain
+    runner = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "report_live_dump.py" in runner and "startup_info.txt" in runner

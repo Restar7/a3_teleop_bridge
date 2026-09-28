@@ -42,6 +42,8 @@ class UmrRetargetSession:
     # amortise). The offline batch pipeline keeps the configured device.
     smplx_device: str = "cpu"
     verbose: bool = False
+    #: optional JSONL path for per-frame diagnostics (see LiveFrameDump)
+    dump_frames: Path | str | None = None
 
     # prepared state (Stage I)
     module: object = None
@@ -177,6 +179,12 @@ class UmrRetargetSession:
         # solve_frame_body_segment_qp itself, so without this the live reference
         # would silently keep the collapsed-knee behaviour the offline run just
         # fixed.  Calibrated once from the model, applied per frame.
+        self.frame_dump = None
+        _dump_path = self.dump_frames or getattr(args, "dump_frames", None)
+        if _dump_path:
+            self.frame_dump = LiveFrameDump(_dump_path)
+            print(f"[umr-online] dumping per-frame diagnostics to {self.frame_dump.path}")
+
         self._knee_prior = None
         _prior_cost = float(getattr(args, "joint_map_cost", 0.0) or 0.0)
         if _prior_cost > 0.0:
@@ -358,9 +366,26 @@ class UmrRetargetSession:
             "solve_ms": solve_ms,
             "dt": float(getattr(args, "dt", 1.0 / 30.0)),
         }
+        if self.frame_dump is not None:
+            record = {
+                "t": round(time.time(), 4),
+                "cost": round(float(cost), 6),
+                "root_z": round(float(self.root_position(q_opt)[2]), 5),
+            }
+            record.update(_leg_angles_from_joints(joints))
+            solved = self.joint_values(q_opt)
+            for name in LEG_JOINTS:
+                record[f"ref_{name}"] = round(float(solved.get(name, float("nan"))), 5)
+            self.frame_dump.write(**record)
         return q_opt, info
 
     # ------------------------------------------------------------------
+    def close(self) -> None:
+        if getattr(self, "frame_dump", None) is not None:
+            print(f"[umr-online] frame dump: {self.frame_dump.frames} frames -> {self.frame_dump.path}")
+            self.frame_dump.close()
+            self.frame_dump = None
+
     def source_surface(self, frame) -> tuple[np.ndarray, np.ndarray]:
         """SMPL-X vertices/joints for one :class:`HumanSmplFrame` (world frame)."""
         common = self.common
@@ -688,6 +713,73 @@ def sequence_from_frame(frame, betas=None, fps: float = 30.0) -> dict:
         "source_file": "<live>",
         "source_sequence_key": "live",
     }
+
+
+LEG_JOINTS = (
+    "left_hip_pitch_joint", "left_knee_joint", "left_ankle_pitch_joint",
+    "right_hip_pitch_joint", "right_knee_joint", "right_ankle_pitch_joint",
+)
+#: SMPL-X indices used for the source-side leg angles (hip, knee, ankle)
+_SMPLX_LEG = {"L": (1, 4, 7), "R": (2, 5, 8)}
+
+
+def _leg_angles_from_joints(joints) -> dict:
+    """Source-side hip/knee/ankle angles, in the same units the retarget sees."""
+    import numpy as _np
+
+    out: dict[str, float] = {}
+    for side, (hip, knee, ankle) in _SMPLX_LEG.items():
+        h = _np.asarray(joints[hip], dtype=_np.float64)
+        k = _np.asarray(joints[knee], dtype=_np.float64)
+        a = _np.asarray(joints[ankle], dtype=_np.float64)
+        thigh, shank = h - k, a - k
+        cosang = float(
+            _np.dot(thigh, shank) / max(float(_np.linalg.norm(thigh) * _np.linalg.norm(shank)), 1e-12)
+        )
+        out[f"{side}_knee_interior_deg"] = float(
+            _np.degrees(_np.arccos(_np.clip(cosang, -1.0, 1.0)))
+        )
+        out[f"{side}_hip_to_ankle_m"] = float(_np.linalg.norm(h - a))
+        # hip pitch: sagittal tilt of the thigh away from straight down
+        down = _np.array([0.0, 0.0, -1.0])
+        out[f"{side}_thigh_tilt_deg"] = float(
+            _np.degrees(
+                _np.arccos(_np.clip(_np.dot(thigh / max(float(_np.linalg.norm(thigh)), 1e-12), down), -1.0, 1.0))
+            )
+        )
+    return out
+
+
+class LiveFrameDump:
+    """Append-only JSONL of what the live session saw and what it produced.
+
+    One line per solved frame: the source-side leg angles plus the reference
+    joint values that came out.  Comparing the excursions of the two answers
+    "did the operator's leg motion reach the reference?" without guessing.
+    """
+
+    def __init__(self, path):
+        from pathlib import Path as _Path
+
+        self.path = _Path(path).expanduser()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = self.path.open("w", encoding="utf-8")
+        self.frames = 0
+
+    def write(self, **fields) -> None:
+        import json as _json
+
+        self._handle.write(_json.dumps(fields, separators=(",", ":")) + "\n")
+        self.frames += 1
+        if self.frames % 50 == 0:
+            self._handle.flush()
+
+    def close(self) -> None:
+        try:
+            self._handle.flush()
+            self._handle.close()
+        except Exception:
+            pass
 
 
 def _sequence_from_frame(frame, template=None):
