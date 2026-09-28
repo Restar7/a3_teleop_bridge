@@ -47,21 +47,67 @@ A3_REFERENCE_V1 (ZMQ, 10×29@il order) ──► 取第 0 帧 + 置换到 policy
                                                                               /ta/whole_body_command
 ```
 
-适配节点需要实现的内容(接口已全部具备,约 200 行):
+**现状(已实现,只剩最后的 publish 调用)**:
 
 ```text
-1. 用 a3_reference_stream.{hpp,cpp} 收包/解码/校验(已写好,16 项单测通过)
-   - 协议 A3_REFERENCE_V1: b"A3R1" + uint32 hdr_len + msgpack header + float32 payload
-   - seq 单调、NaN、限位、窗口形状校验由 A3ReferenceValidateWindow 完成
-   - 新鲜度:LastReceiveAgeMs() 与官方 50 ms frame-age watchdog 对齐
-2. 取 window 的第 0 帧(当前时刻),il → policy 顺序置换
-3. 组 TaWholeBodyCommandChannel 消息并 publish(topic 用 config 里的 teleop.topic)
-4. 断流/超时:停止 publish(官方 runtime 会 hold 最后一条并在 50 ms 后 safe halt),
-   绝不自己 extrapolate
+include/a3_deploy/a3_reference_stream.hpp/.cpp        收包/解码/校验(16 项单测)
+include/a3_deploy/a3_teleop_joint_order.hpp           生成的 il<->policy 置换表(勿手改)
+include/a3_deploy/a3_teleop_command_source.hpp/.cpp   window -> 通道字段 + 发布泵(24 项单测)
+unit_tests/test_a3_teleop_command_source.cpp          独立测试,不需要 AimRT/ZMQ
 ```
 
-编译:`a3_reference_stream.cpp` 已在 `gear_sonic_deploy/src/CMakeLists.txt` 的构建目标里
-(与 runtime 同一个包),所以适配节点加进同一个 CMake 目标即可拿到 ZMQ 依赖。
+`A3TeleopCommandPump::PushWindow()` 产出的 `A3WholeBodyCommandFields` 已经就是
+`/ta/whole_body_command` 的字段分组(腰 3 / 左臂 7 / 右臂 7 / 左腿 6 / 右腿 6 /
+pelvis 四元数 / 速度 30 槽),机器人侧只剩**把字段填进 `TaWholeBodyCommandChannel`
+然后 publish**这一处 AimRT 代码:
+
+```cpp
+// 机器人侧接线(需要 AimRT + TA proto,故不在本机编译)
+A3ReferenceStream stream;            // 收 A3_REFERENCE_V1
+stream.Start({.endpoint = "tcp://<orin-ip>:5560", .enforce_limits = true});
+A3TeleopCommandPump pump;            // window -> 通道字段
+while (running) {
+  stream.PollOnce();
+  A3ReferenceWindow window;
+  if (stream.Latest(&window)) {
+    std::vector<A3WholeBodyCommandFields> cmds;
+    if (pump.PushWindow(window, now_ns(), &cmds)) {
+      for (const auto& c : cmds) PublishWholeBodyCommand(c);   // 约 20 行:AimRT publish
+    }
+  }
+  if (pump.ShouldHold(now_ns())) { /* 停止 publish:runtime 自己 hold + 50 ms 后 safe halt */ }
+  sleep_until_next_tick();           // 50 Hz
+}
+```
+
+关键行为(都有单测):
+
+```text
+il -> policy 置换          kA3IlToPolicyIndex / kA3PolicyToIlIndex(由 contract 生成)
+一窗多帧                  20 Hz 窗口拆成 10 条命令 → 官方 50 Hz 缓冲一直是密的
+时间戳                    首窗标定时钟偏移,之后 t + i*dt;严格单调
+去重                      重叠窗口里已发过的帧不再重发
+安全                      NaN / 越限 / 相邻 tick 跳变 → 整窗拒绝
+断流                      stale_after_ms(默认 50,与官方 frame-age watchdog 一致)→ 停止发布
+head                      协议里没有头部数据,has_head_command=false,runtime 保持自己的头部目标
+```
+
+编译:`a3_teleop_command_source.cpp` 与 `a3_reference_stream.cpp` 都在
+`gear_sonic_deploy/src/CMakeLists.txt` 的构建目标里(同一个包同一份 ZMQ 依赖)。
+本机(无 AimRT)验证:
+
+```bash
+cd ~/a3_teleop_ws/a3_teleop_bridge
+bash tools/run_cpp_teleop_command_test.sh      # 24 项检查,纯 C++17
+bash tools/run_cpp_reference_test.sh           # 解码侧 16 项检查
+```
+
+**注意**:官方 `policy_parameters.hpp` 里那套 `isaaclab_to_mujoco` /
+`mujoco_to_isaaclab` 是 **G1 约定**的顺序,**不是**本通道的顺序。本通道(policy view)
+的顺序由官方 `ConvertTaWholeBodyCommand` 明确注释为
+`waist[0..2] / left arm[3..9] / right arm[10..16] / left leg[17..22] / right leg[23..28]`,
+与 bridge contract 的 `policy_joint_names` 一致 —— 置换表由
+`tools/make_cpp_joint_order.py` 从 contract 生成,单测里逐名字核对,禁止手写。
 
 ### 路线 B:直接把 `A3ReferenceStream` 挂进 runtime
 

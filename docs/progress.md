@@ -647,3 +647,34 @@
 - **交付物**: `dist/a3_teleop_orin_20260927_121056.tar.gz`(14 MB,含 MANIFEST 记三仓库 SHA)、
   `dist/*.bundle`。
 - **下一阶段**: Orin/M9–M12 需硬件;上机时按 `docs/DEPLOY_ORIN.md` → `docs/A3_ONBOARD.md` 执行。
+
+## 阶段 59/60 — A3 侧参考→通道桥(C++ 实现 + 单测)
+
+- **commit**: 本条目对应 sonic_for_a3 上的新提交(C++ 适配层)
+- **执行命令**:
+  ```bash
+  python tools/make_cpp_joint_order.py                    # 生成 il<->policy 置换表
+  bash tools/run_cpp_teleop_command_test.sh               # 24 项检查
+  bash tools/run_cpp_reference_test.sh                    # 解码侧 16 项检查(回归)
+  ```
+- **输入**: `generated/a3_contract.json`(policy/il 名字与置换)、`A3_REFERENCE_V1` 窗口
+- **输出**: `include/a3_deploy/a3_teleop_joint_order.hpp`(生成)、
+  `include/a3_deploy/a3_teleop_command_source.hpp`、
+  `src/a3_deploy/a3_teleop_command_source.cpp`、
+  `unit_tests/test_a3_teleop_command_source.cpp`
+- **结果**: **PASS(24/24)**
+  ```text
+  policy 顺序与官方 ConvertTaWholeBodyCommand 注释逐名字一致
+  置换表为精确互逆;wire 每个索引都落到官方转换器读取的 policy 索引
+  速度按 leg(12)+waist(3)+head(1)+arm(14) 布局往返
+  NaN / invalid / 越限 / 帧索引越界 → 拒绝
+  20 Hz 窗口拆成 10 条命令,时间戳严格单调、重叠帧不重发
+  断流 50 ms → ShouldHold;相邻 tick 跳变 → 拒绝
+  ```
+- **重要发现(方案 §0 第 5 条的典型例子)**:官方 `policy_parameters.hpp` 里的
+  `isaaclab_to_mujoco` / `mujoco_to_isaaclab` 是 **G1 约定**的顺序,**不是**
+  `/ta/whole_body_command` 的顺序(后者由 `ConvertTaWholeBodyCommand` 注释给出:
+  waist/左臂/右臂/左腿/右腿)。两者不同,若按 G1 表置换会得到**静默错误**的参考。
+  本实现只使用由 contract 生成的置换表,并在单测里逐名字核对。
+- **剩余**:机器人侧约 20 行 AimRT publish 接线(需要 TA proto,本机无 AimRT 无法编译)
+- **下一阶段**: Orin/M9–M12 硬件到位后按 `GO_LIVE_CHECKLIST.md` 执行
