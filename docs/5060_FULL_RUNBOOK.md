@@ -737,8 +737,29 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 | `initialize sdk,connect127.0.0.1:60061` 后一直 `waiting for body data...` | PC Service 起了,但**头显没连上 / 没开身体追踪 / 中途掉线** | B。见下方"头显掉线" |
 | 出现 `Stream state: RUNNING` + `sent=` 递增 | **头显侧 OK** | 往下看 T2/T3 判据 |
 | `Stream state: PAUSED` | 忘了 unpause | 按手柄 **A**,或确认脚本带了 `--start-unpaused` |
+| **进了 MuJoCo 机器人立刻往后倒** | **不是关节对应问题**:发送端只发 root 相对的局部关节 + 朝向,**不发 root 世界平移**;修前 bridge 把它兜底成 `[0,0,0]`,于是参考的骨盆比机器人站的地方低 0.975 m,策略被命令"把骨盆放到地面"→ 塌下去 | **已修**(2026-09-28):缺 root 时重建为站立高度 `[0,0,0.975]`。症状特征:`fall=True` 在 ~0.8 s、`root_height≈0.25`、`roll/pitch≈180°`、状态机卡在 `CALIBRATION` |
 
 `run_pico_sim.sh` 会替你走完 A 的检查,并在发送端卡住 15 s 后**直接把上面这张表打出来**。
+
+**⚠️ live PICO 的 root 是重建出来的(2026-09-28 实测踩过)**
+
+头显发送端的 payload 只有三个字段,全是对 root 相对的局部量:
+
+```python
+{"smpl_pose": ..., "smpl_joints": ..., "body_quat_w": ...}    # 没有 root_translation
+```
+
+修前 bridge 在没有 root 时兜底成 `[0,0,0]` → 参考的骨盆在地面上(录制文件里是 `z=0.975`)。
+后果:机器人一进 MuJoCo 就往后倒(0.8 s 内 `fall=True`)。现在缺 root 时重建为站立高度,
+可用 `A3_PICO_STANDING_PELVIS_M` 覆盖。遥操是**原地**的,所以常量站高既正确、
+也和录制路径一致。
+
+**⚠️ live PICO 需要标定才会进 TRACKING**
+
+状态机只有在 `calibration is not None` 时才进 TRACKING。自动标定原本只覆盖
+`trajectory`/`recording`,**`pico` 没有路径** → 真机永远停在 CALIBRATION 不会跟随。
+现在 live 也接了:服务端会用**头显前 ~1.5 秒的帧**自动标定(操作者这段时间站直别动),
+也可以用 `--save-calibration` 存下来、下次 `--calibration` 直接载入。
 
 **⚠️ 端口通 ≠ 头显在推数据**(本机实测踩过):
 

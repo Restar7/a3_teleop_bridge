@@ -197,6 +197,52 @@ def main(argv: list[str] | None = None) -> int:
         except CalibrationError as exc:
             print(f"[live] auto-calibration skipped: {exc}")
 
+    # ---- live PICO auto-calibration (plan section 74) --------------------
+    # The block above only covers sources that already have a recording to
+    # sample.  A live headset has none, and the pico source has no calibration
+    # path at all -- so `pipeline.calibration` stayed None, the state machine sat
+    # in CALIBRATION forever, and nothing could ever reach TRACKING (which the
+    # real robot needs before it will follow a reference).  Collect the first
+    # frames from the live stream instead and calibrate from those: the operator
+    # stands still for the first second.
+    if (
+        args.auto_calibrate
+        and args.source == "pico"
+        and pipeline.calibration is None
+        and provider is not None
+    ):
+        live_inner = provider
+        pending = []
+        state = {"need": max(10, int(1.5 * max(args.playback_hz, 1.0))), "tries": 0}
+
+        def provider():  # type: ignore[misc]
+            frame = live_inner()
+            if frame is not None and pipeline.calibration is None:
+                pending.append(frame)
+                if len(pending) >= state["need"]:
+                    try:
+                        pipeline.calibration = SessionCalibration.from_frames(
+                            list(pending), robot_height_m=1.07
+                        )
+                        print(
+                            f"[live] auto-calibrated from {len(pending)} live frames: "
+                            f"yaw_off={pipeline.calibration.root_yaw_offset_rad:+.3f} rad "
+                            f"scale={pipeline.calibration.body_scale:.3f} "
+                            f"left_right_ok={pipeline.calibration.left_right_ok}"
+                        )
+                        if args.save_calibration:
+                            pipeline.calibration.save(args.save_calibration)
+                            print(f"[live] saved calibration {args.save_calibration}")
+                    except CalibrationError as exc:
+                        state["tries"] += 1
+                        pending.clear()
+                        if state["tries"] >= 3:
+                            print(f"[live] auto-calibration gave up after 3 tries: {exc}")
+                            state["need"] = 1 << 30  # stop retrying
+                        else:
+                            print(f"[live] auto-calibration retry {state['tries']}: {exc}")
+            return frame
+
     print(f"[live] source={args.source} backend={args.backend} duration={args.duration:g}s "
           f"playback={args.playback_hz:g} Hz publish={bool(publisher)}")
     started = time.time()

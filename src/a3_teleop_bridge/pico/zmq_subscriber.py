@@ -33,6 +33,14 @@ DEFAULT_TELEOP_CONFIG = BRIDGE_ROOT / "configs" / "teleop.yaml"
 
 PACKED_HEADER_SIZE = 1280
 DEFAULT_TOPIC = b"pose"
+
+#: Pelvis height (m) used when a packet carries no absolute body position.
+#: The A3 sender publishes root-relative joints + orientation only, and this is
+#: the SMPL-X neutral standing pelvis height the whole offline/recorded path
+#: uses (`recordings/*/smpl.npz` root_translation z = 0.975).  Without it the
+#: retarget is handed a human lying on the floor and the reference drives the
+#: robot down.  Override with A3_PICO_STANDING_PELVIS_M or `standing_pelvis_m`.
+DEFAULT_STANDING_PELVIS_HEIGHT_M = 0.975
 DTYPE_MAP = {"f32": "<f4", "f64": "<f8", "i32": "<i4", "i64": "<i8", "bool": "?"}
 
 __all__ = [
@@ -158,6 +166,10 @@ class TeleopConfig:
 
 class PicoPoseSubscriber:
     """SUB socket -> :class:`PicoFrame` with latest-only draining."""
+
+    #: Pelvis height used when the packet has no absolute root (see the module
+    #: constant); instance attribute so a caller can override per session.
+    standing_pelvis_m = DEFAULT_STANDING_PELVIS_HEIGHT_M
 
     #: field names the A3 sender publishes; the G1 joint vectors are ignored
     REQUIRED_FIELDS = ("smpl_pose", "smpl_joints")
@@ -309,11 +321,22 @@ class PicoPoseSubscriber:
             candidate = np.asarray(fields["root_quat_w"], dtype=np.float64).reshape(-1, 4)[-1]
             root_quat = candidate / max(float(np.linalg.norm(candidate)), 1e-12)
 
+        # The A3 sender publishes only root-relative joints + orientation: no
+        # root_translation and no smpl_joints_world, so the packet carries no
+        # absolute body position at all.  Defaulting to the origin is what made
+        # the robot collapse on the first live PICO run -- the retarget saw a
+        # human whose pelvis sat on the floor, so the reference put the A3's
+        # pelvis ~0.98 m below where it stands, root_err grew to 1.37 m and the
+        # robot tipped over backwards within 0.8 s.  Reconstruct a standing root
+        # instead: teleoperation is in-place, and this is exactly what the
+        # recorded path carries (root_translation z = 0.975).
         root_translation = np.zeros(3)
+        root_source = "none"
         for key in ("root_translation", "root_pos", "root_pos_w"):
             value = fields.get(key)
             if value is not None and np.asarray(value).size >= 3:
                 root_translation = np.asarray(value, dtype=np.float64).reshape(-1, 3)[-1]
+                root_source = key
                 break
         else:
             world = fields.get("smpl_joints_world")
@@ -321,6 +344,14 @@ class PicoPoseSubscriber:
                 root_translation = (
                     np.asarray(world, dtype=np.float64).reshape(-1, SMPL_JOINT_COUNT, 3)[-1, 0]
                 )
+                root_source = "smpl_joints_world"
+            else:
+                root_translation = np.asarray(
+                    [0.0, 0.0, float(getattr(self, "standing_pelvis_m", DEFAULT_STANDING_PELVIS_HEIGHT_M))],
+                    dtype=np.float64,
+                )
+                root_source = "synthesized_standing"
+        self.last_root_source = root_source
 
         wrist = fields.get("wrist_joint_pos")
         frame = HumanSmplFrame(

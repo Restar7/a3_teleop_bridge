@@ -227,3 +227,56 @@ print("ok")
     reference = np.load(tmp_path / "official_pico.npz")
     for name in reference.files:
         np.testing.assert_allclose(message.fields[name], reference[name])
+
+
+# ---------------------------------------------------------------------------
+# The A3 sender publishes no absolute body position: root-relative joints plus
+# an orientation only.  Defaulting the missing root to the origin is what made
+# the first live teleoperation run collapse (the retarget saw a human lying on
+# the floor, so the reference commanded the A3 pelvis ~0.98 m below where it
+# stands, root_err grew to 1.37 m and the robot tipped over in 0.8 s).
+# ---------------------------------------------------------------------------
+def _live_style_packet(with_root: bool = False) -> bytes:
+    rs = np.random.RandomState(0)
+    payload = {
+        "smpl_pose": np.zeros((1, SMPL_POSE_COUNT, 3), np.float32),
+        "smpl_joints": (rs.randn(1, SMPL_JOINT_COUNT, 3) * 0.3).astype(np.float32),
+        "body_quat_w": np.array([1.0, 0.0, 0.0, 0.0], np.float32),
+    }
+    if with_root:
+        payload["root_translation"] = np.array([0.1, 0.2, 0.9], np.float32)
+    return pack_like_official(payload)
+
+
+def test_absent_root_is_reconstructed_as_a_standing_pelvis():
+    from a3_teleop_bridge.pico.zmq_subscriber import (
+        DEFAULT_STANDING_PELVIS_HEIGHT_M,
+        PicoPoseSubscriber,
+        decode_packed_message,
+    )
+
+    sub = PicoPoseSubscriber.__new__(PicoPoseSubscriber)  # decode path needs no socket
+    frame = sub._build_smpl_frame(decode_packed_message(_live_style_packet()), 0, 1, 2)
+    assert frame.root_translation[2] == pytest.approx(DEFAULT_STANDING_PELVIS_HEIGHT_M)
+    assert frame.root_translation[0] == 0.0 and frame.root_translation[1] == 0.0
+    assert sub.last_root_source == "synthesized_standing"
+
+
+def test_published_root_still_wins():
+    from a3_teleop_bridge.pico.zmq_subscriber import PicoPoseSubscriber, decode_packed_message
+
+    sub = PicoPoseSubscriber.__new__(PicoPoseSubscriber)
+    frame = sub._build_smpl_frame(decode_packed_message(_live_style_packet(with_root=True)), 1, 3, 4)
+    assert np.allclose(frame.root_translation, [0.1, 0.2, 0.9])
+    assert sub.last_root_source == "root_translation"
+
+
+def test_live_pico_has_an_auto_calibration_path():
+    """Without it the state machine never leaves CALIBRATION (live PICO only)."""
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "apps" / "retarget_live.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'args.source == "pico"' in source
+    assert "auto-calibrated from" in source
+    # and it must actually attach the calibration to the pipeline
+    assert "pipeline.calibration = SessionCalibration.from_frames" in source
