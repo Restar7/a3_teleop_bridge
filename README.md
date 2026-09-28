@@ -183,6 +183,7 @@ bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz -
 | --- | --- |
 | [`docs/DEPLOY_ORIN.md`](docs/DEPLOY_ORIN.md) | Orin 全流程:预检 → 环境重建 → SMPL-X 手工拷贝 → 就绪门禁(16 项)→ 网络 → PICO+UMR live → MuJoCo 消费端验证 → 长跑/故障注入 → fallback |
 | [`docs/A3_ONBOARD.md`](docs/A3_ONBOARD.md) | 机载:含**已实现的参考→通道桥**(`a3_teleop_command_source.*`,24 项 C++ 单测)与唯一的 AimRT 接线点 |
+| [`docs/SIM_TELEOP.md`](docs/SIM_TELEOP.md) | **在仿真里用 PICO 遥操**:三层验证(离线回放 → 录制驱动 → 真头显)、三个终端命令、判据、无数据时的行为与排查 |
 | [`docs/GO_LIVE_CHECKLIST.md`](docs/GO_LIVE_CHECKLIST.md) | **单页上线清单**:打包→Orin→PICO→MuJoCo 复核→机载→悬吊 10 级,每步带命令与判据 |
 | [`docs/pico_setup.md`](docs/pico_setup.md) | PICO 头显 + PC Service + `xrobotoolkit_sdk`(x86/Orin)+ 发送端 + 收帧验证 |
 | [`docs/DELIVERY.md`](docs/DELIVERY.md) | 交付清单、目标仓库、**部署公钥**、推送命令、bundle 离线路径 |
