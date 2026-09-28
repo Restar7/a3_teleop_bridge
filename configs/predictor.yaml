@@ -126,7 +126,7 @@ root_angular_velocity_limit: 4.0
 filter_min_cutoff: 1.5
 filter_beta: 0.05
 filter_d_cutoff: 1.0
-hold_after_ms: 50.0
+hold_after_ms: 150.0
 invalid_after_ms: 250.0
 max_source_gap_s: 0.5
 notes:

@@ -205,3 +205,55 @@ def test_fake_pico_sender_matches_the_real_payload():
 def test_pico_sim_exposes_the_fake_sender_for_desk_testing():
     source = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
     assert "tools/fake_pico_sender.py" in source
+
+
+def test_generated_motions_start_from_a_natural_stance():
+    """The validation set must not be "a human holding their arms out".
+
+    make_smplx_validation_motions.py used to interpolate every clip from the
+    SMPL-X rest pose, whose arms sit 74-82 deg from vertical.  The retarget
+    faithfully reproduced that (A3 shoulder_roll 1.545 rad = its T-pose), so the
+    whole acceptance set exercised a posture no operator ever stands in, and a
+    real headset user with arms down could not be followed.
+    """
+    source = (BRIDGE_ROOT / "tools" / "make_smplx_validation_motions.py").read_text(encoding="utf-8")
+    assert "def natural_stance(" in source
+    assert "arm_angle_from_vertical" in source
+    # the stance must be added to every clip, not only to `stand`
+    assert "build_clip(fk, frames, specs) + stance[None, :, :]" in source
+
+
+def test_acceptance_clips_have_arms_down():
+    """End-to-end guard: the retargeted acceptance set stands with arms at the sides."""
+    import numpy as np
+
+    from a3_teleop_bridge.contract import load_contract
+    from a3_teleop_bridge.umr.offline import load_umr_result
+
+    clip_dir = Path("/home/wusichen/a3_teleop_ws/UMR/output/a3_pico_all")
+    if not clip_dir.is_dir():
+        pytest.skip("acceptance npz set not present on this machine")
+    names = list(load_contract().policy_joint_names)
+    result = load_umr_result(clip_dir / "m5_stand_smplx_agibot_a3.npz")
+    values = np.asarray(
+        [[result.joint_value(i, n) for n in names] for i in range(result.n_frames)]
+    )
+    left = values[:, names.index("left_shoulder_roll_joint")]
+    right = values[:, names.index("right_shoulder_roll_joint")]
+    # the A3's own keyframe stands at +0.112; its T-pose is +1.545
+    assert left.max() < 0.5, f"left arm is not hanging: shoulder_roll {left.max():+.3f}"
+    assert right.min() > -0.5, f"right arm is not hanging: shoulder_roll {right.min():+.3f}"
+    assert left.mean() > 0.0 and right.mean() < 0.0
+
+
+def test_sender_publishes_root_translation():
+    """Without it the operator's steps never leave the headset (in-place walking)."""
+    source = Path(
+        "/home/wusichen/a3_teleop_ws/sonic_for_a3/gear_sonic/scripts/pico_pose_zmq_minimal.py"
+    )
+    if not source.is_file():
+        pytest.skip("sonic_for_a3 checkout not present on this machine")
+    text = source.read_text(encoding="utf-8")
+    assert "_compute_root_translation" in text
+    assert '"root_translation": np.stack(' in text
+    assert "--no-root-translation" in text

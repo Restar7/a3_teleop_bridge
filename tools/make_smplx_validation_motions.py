@@ -147,6 +147,42 @@ def find_twist_axis(fk: SmplFk, joint: int, angle: float = 0.5) -> tuple[np.ndar
     return best
 
 
+def arm_angle_from_vertical(fk: SmplFk, body: np.ndarray) -> np.ndarray:
+    """Angle (deg) between each upper arm and straight down; 0 = hanging."""
+    joints = fk.joints(body, BASE_ROOT_ROTATION)
+    down = np.array([0.0, 0.0, -1.0])
+    out = []
+    for shoulder, elbow in ((L_SHOULDER, L_ELBOW), (R_SHOULDER, R_ELBOW)):
+        v = joints[elbow] - joints[shoulder]
+        out.append(
+            float(np.degrees(np.arccos(np.clip(np.dot(v / np.linalg.norm(v), down), -1.0, 1.0))))
+        )
+    return np.asarray(out)
+
+
+def natural_stance(fk: SmplFk, left_arm_down: np.ndarray, right_arm_down: np.ndarray,
+                   target_deg: float = 12.0) -> tuple[np.ndarray, float]:
+    """The all-clip base pose: arms hanging by the sides, not out at the rest pose.
+
+    The SMPL-X rest skeleton stands with the arms out at 74-82 deg from vertical,
+    and every clip used to interpolate from exactly that.  The retarget faithfully
+    reproduced it (the A3 came out at shoulder_roll 1.545 rad, its T-pose), so the
+    whole validation set was "a human holding their arms out" -- nothing like an
+    operator standing in front of a headset.  Search the angle that actually puts
+    the arms down rather than guessing it.
+    """
+    best = (None, None, np.inf)
+    for angle in np.linspace(0.6, 1.8, 25):
+        body = np.zeros((21, 3))
+        body[L_SHOULDER - 1] = left_arm_down * angle
+        body[R_SHOULDER - 1] = right_arm_down * angle
+        measured = arm_angle_from_vertical(fk, body)
+        error = float(np.abs(measured - target_deg).max())
+        if error < best[2]:
+            best = (body, angle, error)
+    return best[0], float(best[1])
+
+
 def smoothstep(t: np.ndarray) -> np.ndarray:
     t = np.clip(t, 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
@@ -210,6 +246,16 @@ def main(argv: list[str] | None = None) -> int:
     rest_ankle_z = float(fk.joints(np.zeros(21 * 3), BASE_ROOT_ROTATION)[L_ANKLE][2])
     root_height = 0.10 - rest_ankle_z
 
+    # every clip now departs from a natural stance instead of the T-posed rest
+    left_arm_down = -left_arm_up[0]
+    right_arm_down = -right_arm_up[0]
+    stance, stance_angle = natural_stance(fk, left_arm_down, right_arm_down)
+    print(
+        f"[motions] natural stance: arm-down rotation {stance_angle:.3f} rad -> "
+        f"arm angle {np.round(arm_angle_from_vertical(fk, stance), 1)} deg from vertical "
+        f"(rest pose was {np.round(arm_angle_from_vertical(fk, np.zeros((21, 3))), 1)})"
+    )
+
     clips: dict[str, list[tuple[int, np.ndarray, float]]] = {
         "stand": [],
         "raise_left_arm": [(L_SHOULDER, left_arm_up[0], 1.2)],
@@ -228,7 +274,8 @@ def main(argv: list[str] | None = None) -> int:
 
     metadata: dict[str, dict] = {}
     for name, specs in clips.items():
-        body = build_clip(fk, frames, specs) if specs else np.zeros((frames, 21, 3))
+        # motion on top of the natural stance (so `stand` really is standing)
+        body = build_clip(fk, frames, specs) + stance[None, :, :]
         poses = np.zeros((frames, 55, 3), dtype=np.float32)
         poses[:, 0] = BASE_ROOT_ROTATION.astype(np.float32)
         poses[:, 1:22] = body.astype(np.float32)

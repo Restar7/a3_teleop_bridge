@@ -6,6 +6,7 @@
 #   bash scripts/run_pico_sim.sh --replay DIR    # no headset: drive from a recording
 #   bash scripts/run_pico_sim.sh --no-viewer     # headless (CI / no display)
 #   bash scripts/run_pico_sim.sh --skip-pico-probe   # do not pre-check headset streaming
+#   bash scripts/run_pico_sim.sh --pico-fps 30       # match the solver rate (default 30)
 #   bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
 #
 # This starts BOTH halves and tears them down together:
@@ -34,6 +35,7 @@ DURATION=150
 POLICY_STEPS=3000
 PORT=5560
 PICO_PORT=5556
+PICO_FPS=30
 REPLAY=""
 CHECK_ONLY=0
 OUT_DIR=""
@@ -53,6 +55,7 @@ while [ $# -gt 0 ]; do
     --policy-steps) POLICY_STEPS="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --pico-port) PICO_PORT="$2"; shift 2 ;;
+    --pico-fps) PICO_FPS="$2"; shift 2 ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -226,7 +229,7 @@ if [ -z "$REPLAY" ]; then
   [ "$(uname -m)" = "aarch64" ] && XRT_LIB="$XRT_LIB/aarch64"
   ( cd "$SONIC_ROOT" && LD_LIBRARY_PATH="$XRT_LIB:${LD_LIBRARY_PATH:-}" \
       PYTHONUNBUFFERED=1 "$PY_PICO" -u gear_sonic/scripts/pico_pose_zmq_minimal.py \
-      --port "$PICO_PORT" --target_fps 50 --start_unpaused ) \
+      --port "$PICO_PORT" --target_fps "$PICO_FPS" --start_unpaused ) \
       >"$OUT_DIR/pico_sender.log" 2>&1 &
   SENDER_PID=$!
 

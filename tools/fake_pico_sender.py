@@ -71,6 +71,24 @@ def main(argv: list[str] | None = None) -> int:
     quat = np.asarray(data["body_quat_w"], dtype=np.float32)
     root = np.asarray(data["root_translation"], dtype=np.float32) if "root_translation" in data else None
 
+    # The recording stores body_quat_w in the *bridge* convention (it is what
+    # the pipeline consumes).  A real sender puts the deploy-runtime frame on the
+    # wire, and zmq_subscriber converts it back -- so to be a faithful stand-in
+    # this tool has to apply the inverse transform, otherwise the frame gets
+    # converted twice.
+    def to_sender_frame(q):
+        q = q / max(float(np.linalg.norm(q)), 1e-12)
+        return _quat_mul(_quat_mul(q, R_Y_180_WXYZ), SMPL_BASE_ROT_CONJ_WXYZ)
+
+    from a3_teleop_bridge.pico.zmq_subscriber import (
+        R_Y_180_INV_WXYZ,
+        SMPL_BASE_ROT_CONJ_INV,
+        quat_mul_wxyz as _quat_mul,
+    )
+
+    R_Y_180_WXYZ = -R_Y_180_INV_WXYZ
+    SMPL_BASE_ROT_CONJ_WXYZ = np.array([0.5, -0.5, -0.5, -0.5])
+
     ctx = zmq.Context()
     socket = ctx.socket(zmq.PUB)
     socket.bind(f"tcp://*:{args.port}")
@@ -85,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "smpl_pose": pose[k][None],
             "smpl_joints": joints[k][None],
-            "body_quat_w": quat[k],
+            "body_quat_w": to_sender_frame(quat[k]),
         }
         if args.with_root and root is not None:
             payload["root_translation"] = root[k]

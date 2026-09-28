@@ -23,7 +23,7 @@ frequencies_hz:
   reference_publish: 50
   a3_policy: 50
 watchdog:
-  hold_after_ms: 50.0
+  hold_after_ms: 150.0
   invalid_after_ms: 250.0
   comment: aligned with the official runtime frame-age watchdog (50 ms)
 reference_window:

@@ -779,6 +779,47 @@ root_quat   =  Y_TO_Z_UP ⊗ xr_root                                      ← �
 现在 live 也接了:服务端会用**头显前 ~1.5 秒的帧**自动标定(操作者这段时间站直别动),
 也可以用 `--save-calibration` 存下来、下次 `--calibration` 直接载入。
 
+**⚠️ 源动作原本是"人把手臂平举着"(2026-09-28 修复)**
+
+`make_smplx_validation_motions.py` 一直从 **SMPL-X rest 骨架**插值,而 rest 骨架的手臂是
+**74–82°(接近水平)** 的。retarget 忠实地复现了它 → A3 的肩 roll 停在 **1.545 rad(=它的 T-pose)**,
+而 A3 **自己的 keyframe 标称站姿是 +0.112(手臂自然下垂)**。也就是说整个验收集演练的是
+"一个人把手臂端着",跟真人站在头显前的姿势完全不同。
+
+现在生成器先算出一个**自然站姿**基准(实测搜索,手臂 9.5°/12.0° 下垂),所有 clip 从它出发:
+
+```text
+                     旧(手臂平举)      新(自然下垂)
+m5_stand 肩 roll     +1.545            +0.241        (A3 keyframe = +0.112)
+raise_left_arm       0.241→(同左)      0.241→1.502   (抬手仍然有效)
+bend_knees 膝        0.000             0.237→0.805
+```
+
+重新生成后的全套验收 **9/9 PASS**,而且跟踪质量整体变好:stand RMSE 0.0568→**0.0397**、
+raise_left_arm 0.0893→**0.0532**、raise_right_arm 0.1028→**0.0492**。
+
+**⚠️ 走不动:发送端原来根本没发位移**
+
+`pico_pose_zmq_minimal.py` 一直算 `positions = body_poses_np[:, :3]` 然后**丢掉**,
+所以操作者的位移从来没离开过头显 —— 大步迈也只能原地踏步。现在发送端把它按
+Z-up 转换 + **锚定到起始帧**(头显 tracking 空间原点无意义),并放在站立高度上发布:
+
+```text
+root_translation = [Δx, Δy, 0.975 + Δz]     # 相对你按 A / 重新开始的位置
+```
+
+bridge 端本来就优先使用发布的 root,不用改。`--no-root-translation` 可关掉(退回常量站高)。
+
+**⚠️ 反复初始化:输入频率 / solver 吞吐不匹配**
+
+solver p50 ≈ 46 ms(≈21 Hz),而发送端按 50 Hz 推 → 近半帧被丢、参考短时变旧 → 状态在
+`TRACKING/HOLD` 之间跳。而 **HOLD 帧会被消费者原样转发并清空待处理窗口**
+(`reference_provider.py`:`_pending = None; _current = None`),表现出来就是"参考被重置"。
+
+已做:发送端默认降到 **30 Hz**(`--pico-fps` 可调)、`hold_after_ms` 50→**150 ms**
+(`invalid_after_ms` 仍 250 ms 兜底)。**没解决**:solver 本身 ~21 Hz 是硬瓶颈,
+要彻底消除抖动需要提速 solver 或再降输入频率。
+
 **没有头显也能测 live 路径**(`--replay` 测不到它)
 
 `--replay` 走的是录制加载器,**完全不经过 ZMQ 订阅端**,所以上面这两个 live 才有的问题

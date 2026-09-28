@@ -248,7 +248,12 @@ def test_stale_reference_holds(predictor):
     pose[2] = 0.9
     pose[3:] = load_limits().default_angle
     feed(predictor, [pose] * 5)
-    window = predictor.window(timestamp_ns=0, source_age_ms=100.0)
+    # derive the age from the configured thresholds instead of hardcoding one:
+    # hold_after_ms was raised 50 -> 150 so a 30 Hz headset stream stops
+    # flapping TRACKING/HOLD, and a magic 100.0 silently stopped being "stale"
+    stale_ms = predictor.config.hold_after_ms + 1.0
+    assert stale_ms < predictor.config.invalid_after_ms
+    window = predictor.window(timestamp_ns=0, source_age_ms=stale_ms)
     assert window.state is BridgeState.HOLD
     assert not window.valid
     np.testing.assert_allclose(window.joint_vel_rad_s, 0.0)
@@ -259,7 +264,9 @@ def test_very_stale_reference_is_invalid(predictor):
     pose[2] = 0.9
     pose[3:] = load_limits().default_angle
     feed(predictor, [pose] * 5)
-    window = predictor.window(timestamp_ns=0, source_age_ms=1000.0)
+    window = predictor.window(
+        timestamp_ns=0, source_age_ms=predictor.config.invalid_after_ms + 1.0
+    )
     assert not window.valid
     assert window.state is BridgeState.SAFE_STOP
 
