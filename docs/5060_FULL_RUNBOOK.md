@@ -734,11 +734,38 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 | 日志停在 | 说明 | 去哪修 |
 | --- | --- | --- |
 | `robotics service script not found: /opt/apps/...` 然后一直 `waiting for body data...` | **PC Service 没起**(本机侧) | A。`ss -ltn \| grep 60061` 应该有人监听 |
-| `initialize sdk,connect127.0.0.1:60061` 后一直 `waiting for body data...` | PC Service 起了,但**头显没连上 / 没开身体追踪** | B。查头显里的 PC IP、Wi-Fi、body tracking |
+| `initialize sdk,connect127.0.0.1:60061` 后一直 `waiting for body data...` | PC Service 起了,但**头显没连上 / 没开身体追踪 / 中途掉线** | B。见下方"头显掉线" |
 | 出现 `Stream state: RUNNING` + `sent=` 递增 | **头显侧 OK** | 往下看 T2/T3 判据 |
 | `Stream state: PAUSED` | 忘了 unpause | 按手柄 **A**,或确认脚本带了 `--start-unpaused` |
 
 `run_pico_sim.sh` 会替你走完 A 的检查,并在发送端卡住 15 s 后**直接把上面这张表打出来**。
+
+**⚠️ 端口通 ≠ 头显在推数据**(本机实测踩过):
+
+PC Service 会**先接受头显的 TCP 连接**(63901),而 `is_body_data_available()` 仍然是 False ——
+头显 App 必须真的在推 body tracking。**所以在 preflight 里只查端口会给出假绿灯**:
+
+```text
+20:38:02  new RTC device connected: "TestDevice"     ← 头显连上
+20:44:01  rtc device offline, uid: TestDevice        ← 掉线
+20:51:00  run_pico_sim.sh                            ← 已掉线 7 分钟 → 白等 30 s
+```
+
+现在 preflight 会**直接问 SDK**(`tools/probe_pico_sdk.py --timeout 8`):
+
+```text
+[ OK ] PC Service listening on 127.0.0.1:60061
+[FAIL] PC Service is up but NO body data is arriving from the headset
+```
+
+看到这条就去查头显 App 是否还活着。想看服务侧证据:
+
+```bash
+grep -E 'device' ~/.local/share/PICOBusinessSuitData/log/$(date +%Y%m%d).txt | tail
+# "new RTC device connected" → 连过;"rtc device offline" → 掉了
+```
+
+确实想"先起链路、后戴头显"就加 `--skip-pico-probe`(发送端会在 30 s 内等第一帧)。
 
 **判据(逐条看)**
 

@@ -146,3 +146,39 @@ def test_pico_sim_checks_the_pc_service_port():
     assert "60061" in source
     assert "/opt/apps/roboticsservice/runService.sh" in source
     assert "the headset alone is not enough" in source
+
+
+def test_pico_probe_tool_reports_a_verdict():
+    """A listening PC Service is not a streaming headset.
+
+    The 2026-09-28 failure: the PC Service was up and the headset had a TCP
+    connection, but the device had gone offline 7 minutes earlier, so the run
+    sat for 30 s and then reported "is the PICO sender RUNNING?".  The probe
+    asks the SDK directly and reports through its exit code.
+    """
+    path = BRIDGE_ROOT / "tools" / "probe_pico_sdk.py"
+    assert path.is_file()
+    proc = subprocess.run([sys.executable, str(path), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    source = path.read_text(encoding="utf-8")
+    for marker in ("BODY_DATA_OK", "BODY_DATA_TIMEOUT", "SDK_MISSING"):
+        assert marker in source
+    # it must not treat the SDK's static-destructor abort as a verdict
+    assert "os._exit(0)" in source
+
+
+def test_pico_sim_gates_on_real_body_data():
+    source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "tools/probe_pico_sdk.py" in source, "preflight must ask the SDK, not just the port"
+    assert "BODY_DATA_TIMEOUT" in source
+    assert "--skip-pico-probe" in source
+    # the sender must be unbuffered, otherwise its progress lines (and therefore
+    # the wrapper's live diagnosis) only appear once the process dies
+    assert "PYTHONUNBUFFERED=1" in source
+
+
+def test_pico_sender_output_is_reachable_while_it_runs():
+    """Regression for the 30 s silent wait: block-buffered output hid the reason."""
+    source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "waiting for body data" in source, "the wrapper should watch for this line live"
+    assert '"-u"' in source or " -u " in source

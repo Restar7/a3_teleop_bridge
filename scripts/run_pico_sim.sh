@@ -5,6 +5,7 @@
 #   bash scripts/run_pico_sim.sh --check         # preflight only, start nothing
 #   bash scripts/run_pico_sim.sh --replay DIR    # no headset: drive from a recording
 #   bash scripts/run_pico_sim.sh --no-viewer     # headless (CI / no display)
+#   bash scripts/run_pico_sim.sh --skip-pico-probe   # do not pre-check headset streaming
 #   bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
 #
 # This starts BOTH halves and tears them down together:
@@ -37,6 +38,7 @@ REPLAY=""
 CHECK_ONLY=0
 OUT_DIR=""
 VIEWER=1
+SKIP_PICO_PROBE=0
 
 usage() { sed -n '2,24p' "$0"; }
 
@@ -44,6 +46,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
     --viewer) VIEWER=1; shift ;;
+    --skip-pico-probe) SKIP_PICO_PROBE=1; shift ;;
     --no-viewer) VIEWER=0; shift ;;
     --replay) REPLAY="$2"; shift 2 ;;
     --duration) DURATION="$2"; shift 2 ;;
@@ -157,6 +160,33 @@ finally: s.close()
     note "either keep it at /opt/apps/roboticsservice/runService.sh (sender auto-starts it)"
     note "or start it yourself before this script."
   fi
+  # A listening PC Service is NOT a streaming headset: the service accepts the
+  # headset's TCP connection on 63901 while the SDK still sees no body data.
+  # Ask the SDK directly so a doomed run fails here instead of after 30 s.
+  if [ -x "$PY_PICO" ] && [ "$SKIP_PICO_PROBE" = 0 ]; then
+    # the probe reports through its exit code too, so swallow it here: under
+    # `set -e`/pipefail a non-zero probe would abort the preflight mid-section
+    _probe="$("$PY_PICO" "$BRIDGE_ROOT/tools/probe_pico_sdk.py" --timeout "${PICO_PROBE_TIMEOUT:-8}" 2>/dev/null | tail -1)" || true
+    case "$_probe" in
+      BODY_DATA_OK)
+        pass "headset is streaming body tracking (SDK sees body data)" ;;
+      BODY_DATA_TIMEOUT)
+        fail "PC Service is up but NO body data is arriving from the headset"
+        note "the device is connected at the TCP level but not publishing body tracking."
+        note "check, in order:"
+        note "  1. XRoboToolkit app on the headset: open / restart it, body tracking ON"
+        note "  2. headset PC IP = ${LAN_IP:-<this host>} (it changed if you switched Wi-Fi)"
+        note "  3. the app may have gone offline mid-session -- reopen it, then re-run"
+        note "  4. service-side device log:"
+        note "     grep -E 'device' ~/.local/share/PICOBusinessSuitData/log/\$(date +%Y%m%d).txt | tail"
+        note "skip this probe with --skip-pico-probe (start the chain, then put the headset on)." ;;
+      *)
+        fail "PICO SDK probe did not answer (${_probe:-no output})"
+        note "run it by hand: $PY_PICO $BRIDGE_ROOT/tools/probe_pico_sdk.py" ;;
+    esac
+  elif [ "$SKIP_PICO_PROBE" = 1 ]; then
+    note "--skip-pico-probe: not checking whether the headset is streaming"
+  fi
   note "headset side: XRoboToolkit app open, PC IP = ${LAN_IP:-<this host>}, body tracking on,"
   note "same Wi-Fi. Operator does one straight-stand calibration pose. Controller A toggles pause."
   note "(--start-unpaused is already passed, so it begins RUNNING.)"
@@ -195,7 +225,7 @@ if [ -z "$REPLAY" ]; then
   XRT_LIB="$SONIC_ROOT/external_dependencies/XRoboToolkit-PC-Service-Pybind_X86_and_ARM64/lib"
   [ "$(uname -m)" = "aarch64" ] && XRT_LIB="$XRT_LIB/aarch64"
   ( cd "$SONIC_ROOT" && LD_LIBRARY_PATH="$XRT_LIB:${LD_LIBRARY_PATH:-}" \
-      "$PY_PICO" gear_sonic/scripts/pico_pose_zmq_minimal.py \
+      PYTHONUNBUFFERED=1 "$PY_PICO" -u gear_sonic/scripts/pico_pose_zmq_minimal.py \
       --port "$PICO_PORT" --target_fps 50 --start_unpaused ) \
       >"$OUT_DIR/pico_sender.log" 2>&1 &
   SENDER_PID=$!
