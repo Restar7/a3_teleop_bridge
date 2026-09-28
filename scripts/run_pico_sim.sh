@@ -61,6 +61,9 @@ pass() { printf '  [ OK ] %s\n' "$1"; ok=$((ok+1)); }
 fail() { printf '  [FAIL] %s\n' "$1"; bad=$((bad+1)); }
 note() { printf '         %s\n' "$1"; }
 
+LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)"
+[ -n "$LAN_IP" ] || LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+
 MODE="live PICO headset"
 [ -n "$REPLAY" ] && MODE="replay (no headset): $REPLAY"
 
@@ -134,9 +137,25 @@ finally: s.close()
   else
     fail "port $PICO_PORT already in use -- a PICO sender is probably still running"
   fi
-  note "PICO PC Service must be RUNNING ON THIS MACHINE, headset on the same Wi-Fi."
-  note "If the sender starts but never reaches RUNNING, press A on the controller"
-  note "(the stream is PAUSED by default; --start-unpaused is passed for you)."
+  # The SDK talks to the PC Service on localhost:60061 (that is the address the
+  # sender logs right after "initialize sdk").  It is the one prerequisite the
+  # sender cannot work around: it only auto-starts the service when the official
+  # install sits at /opt/apps/roboticsservice/runService.sh.
+  PC_SERVICE_PORT="${PICO_SERVICE_PORT:-60061}"
+  if ss -ltn 2>/dev/null | grep -q ":${PC_SERVICE_PORT} "; then
+    pass "PC Service listening on 127.0.0.1:${PC_SERVICE_PORT}"
+  elif [ -x /opt/apps/roboticsservice/runService.sh ]; then
+    pass "PC Service installed (sender will auto-start /opt/apps/roboticsservice/runService.sh)"
+  else
+    fail "no PC Service on port ${PC_SERVICE_PORT} and none installed at /opt/apps/roboticsservice/runService.sh"
+    note "the headset alone is not enough: the sender talks to the PC Service over localhost."
+    note "install the official XRoboToolkit PC Service (Linux x86_64) on THIS machine, then"
+    note "either keep it at /opt/apps/roboticsservice/runService.sh (sender auto-starts it)"
+    note "or start it yourself before this script."
+  fi
+  note "headset side: XRoboToolkit app open, PC IP = ${LAN_IP:-<this host>}, body tracking on,"
+  note "same Wi-Fi. Operator does one straight-stand calibration pose. Controller A toggles pause."
+  note "(--start-unpaused is already passed, so it begins RUNNING.)"
 fi
 
 echo "--------------------------------------------------------------"
@@ -177,12 +196,28 @@ if [ -z "$REPLAY" ]; then
       >"$OUT_DIR/pico_sender.log" 2>&1 &
   SENDER_PID=$!
 
-  echo -n "[run] waiting for the sender to reach RUNNING "
-  for _ in $(seq 1 40); do
+  echo -n "[run] waiting for body tracking + RUNNING "
+  _body_note_shown=0
+  for _ in $(seq 1 60); do
     if grep -q "Stream state: RUNNING" "$OUT_DIR/pico_sender.log" 2>/dev/null; then break; fi
     if ! kill -0 "$SENDER_PID" 2>/dev/null; then
       echo; echo "[run] the PICO sender exited immediately:"; tail -25 "$OUT_DIR/pico_sender.log"
       exit 1
+    fi
+    # still stuck before the first body frame: say which side is missing
+    if [ "$_body_note_shown" = 0 ] && grep -q "waiting for body data" "$OUT_DIR/pico_sender.log" 2>/dev/null; then
+      _waited=$(grep -c "waiting for body data" "$OUT_DIR/pico_sender.log" 2>/dev/null || echo 0)
+      if [ "${_waited:-0}" -ge 15 ]; then
+        _body_note_shown=1
+        echo
+        echo "[run] sender is stuck BEFORE any body frame ('waiting for body data...')."
+        echo "      This is the headset/PC-Service side, not UMR/SONIC.  Check, in order:"
+        echo "        1. PC Service running on THIS machine?    ss -ltn | grep ${PICO_SERVICE_PORT:-60061}"
+        echo "        2. headset: XRoboToolkit app open, PC IP = ${LAN_IP:-<this host>}, same Wi-Fi?"
+        echo "        3. headset: body tracking available?  (app shows body data)"
+        echo "        4. operator standing straight, arms down, one calibration pose"
+        echo -n "      still waiting "
+      fi
     fi
     echo -n "."; sleep 0.5
   done

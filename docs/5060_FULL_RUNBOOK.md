@@ -677,6 +677,50 @@ bash scripts/run_pico_sim.sh --replay $A3WS/recordings/all/m5_twist_torso_left  
 [ ] 参考端口 5560 空闲、PICO 端口 5556 空闲(脚本会查)
 ```
 
+#### 17.1.1 PICO 那一端要做什么(两个侧,别只做头显)
+
+头显**不是**直接连本机的 UMR —— 中间必须有 **PC Service**,而 PC Service 跑在**本机**:
+
+```text
+PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
+                          │ xrobotoolkit_sdk
+                          ▼
+                pico_pose_zmq_minimal.py ──ZMQ:5556──► bridge → UMR → A3 参考流
+```
+
+**A. 本机(PC Service 侧)** —— 发送端自己会尝试拉起它,但**只在官方标准安装路径**下:
+
+```text
+[ ] PC Service 装在本机,并且是 /opt/apps/roboticsservice/runService.sh
+      └ 有这个路径:run_pico_sim.sh 起发送端时会自动把它拉起来,你不用管
+      └ 装在别处:自己先起好,或者把它放到上面那个路径
+[ ] 确认在监听:  ss -ltn | grep 60061
+```
+
+> **只看头显是起不来的。** SDK 连的是 **localhost:60061**,PC Service 不在本机,
+> 发送端会一直停在 `waiting for body data...`(`xrobotoolkit_sdk` 装得再对也没用)。
+
+**B. 头显侧(一次性 + 每次)**
+
+```text
+[ ] 头显开开发者模式,与本机**同一 Wi-Fi / 同一网段**
+[ ] 头显里安装并打开 XRoboToolkit 应用,PC IP 填**本机**的 IP(脚本会打印,本机是 192.168.4.39)
+[ ] 确认全身追踪可用(app 里能看到 body data)
+[ ] 操作者:站直、双脚自然分开、双臂自然下垂,做一次标定姿势
+[ ] 手柄 **A 键** = 开始/暂停发送(脚本已带 --start-unpaused,起来就是 RUNNING;A 用于暂停)
+```
+
+**C. 卡住时怎么一眼看出是哪一侧**(发送端日志 `pico_sender.log`)
+
+| 日志停在 | 说明 | 去哪修 |
+| --- | --- | --- |
+| `robotics service script not found: /opt/apps/...` 然后一直 `waiting for body data...` | **PC Service 没起**(本机侧) | A。`ss -ltn \| grep 60061` 应该有人监听 |
+| `initialize sdk,connect127.0.0.1:60061` 后一直 `waiting for body data...` | PC Service 起了,但**头显没连上 / 没开身体追踪** | B。查头显里的 PC IP、Wi-Fi、body tracking |
+| 出现 `Stream state: RUNNING` + `sent=` 递增 | **头显侧 OK** | 往下看 T2/T3 判据 |
+| `Stream state: PAUSED` | 忘了 unpause | 按手柄 **A**,或确认脚本带了 `--start-unpaused` |
+
+`run_pico_sim.sh` 会替你走完 A 的检查,并在发送端卡住 15 s 后**直接把上面这张表打出来**。
+
 **判据(逐条看)**
 
 ```text
