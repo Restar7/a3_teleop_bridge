@@ -186,6 +186,8 @@ bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz -
 | [`docs/DEPLOY_TARGET_DECISION.md`](docs/DEPLOY_TARGET_DECISION.md) | **路线 B 的部署机选型:Orin(机载)**;理由、决策矩阵、Orin 速率判据与一行配置兜底 |
 | [`docs/MACHINE_ROLES.md`](docs/MACHINE_ROLES.md) | **哪台机器跑什么**(4090/5060/Orin/HDU/MDU);5060 当部署机的可行性、Blackwell torch 约束与从零命令 |
 | [`docs/A3_OFFICIAL_INTERFACE.md`](docs/A3_OFFICIAL_INTERFACE.md) | 官方 aimdk v3.2 接口对照(状态机 / ROS2 话题 / 关节名与限位 / motion_player / AimSim 仿真)+ 路线 A/B 选型 |
+| [`docs/5060_FULL_RUNBOOK.md`](docs/5060_FULL_RUNBOOK.md) | **ThinkBook + RTX 5060 专属从头到尾手册**(Blackwell cu128+ / conda 与 venv / 笔记本注意事项 / 一页速查) |
+| [`docs/ORIN_FULL_RUNBOOK.md`](docs/ORIN_FULL_RUNBOOK.md) | **Orin(或任意 Linux)从头到尾手册**:clone → 环境 → 模型 → 自检 → 仿真 → 推理 → 上机 |
 | [`docs/SIM_TELEOP.md`](docs/SIM_TELEOP.md) | **在仿真里用 PICO 遥操**:三层验证(离线回放 → 录制驱动 → 真头显)、三个终端命令、判据、无数据时的行为与排查 |
 | [`docs/GO_LIVE_CHECKLIST.md`](docs/GO_LIVE_CHECKLIST.md) | **单页上线清单**:打包→Orin→PICO→MuJoCo 复核→机载→悬吊 10 级,每步带命令与判据 |
 | [`docs/pico_setup.md`](docs/pico_setup.md) | PICO 头显 + PC Service + `xrobotoolkit_sdk`(x86/Orin)+ 发送端 + 收帧验证 |
