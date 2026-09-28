@@ -30,7 +30,9 @@ cd a3_teleop_bridge && source scripts/env_orin.sh
 
 # ① PICO 头显 → 仿真遥操(MuJoCo 里的 A3 跟着你动)
 bash scripts/run_pico_sim.sh --check     # 先自检:11 ok / 0 failed 再往下
-bash scripts/run_pico_sim.sh
+bash scripts/run_pico_sim.sh --no-viewer # 第一次先关窗口(排除 CPU 竞争,见 §17.6.1)
+#   链路确认没问题之后再开窗口看画面:
+#   bash scripts/run_pico_sim.sh
 
 # ② PICO 头显 → 真机(发布 A3_REFERENCE_V1,A3 侧订阅)
 bash scripts/run_robot_live.sh --check
@@ -671,6 +673,53 @@ cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh \
 
 ---
 
+### 17.0.2 现在就这样跑(照抄,含跑的时候看哪几行)
+
+```bash
+cd /home/wusichen/a3_teleop_ws
+
+# 1) 三个仓库都要 pull(改动分布在三个仓库,漏一个就会出现"离线对了、现场还是老行为")
+git -C a3_teleop_bridge pull --ff-only
+git -C UMR             pull --ff-only
+git -C sonic_for_a3    pull --ff-only
+
+# 2) 自检(期望 11 ok / 0 failed;关键是 "headset is streaming body tracking")
+cd a3_teleop_bridge && source scripts/env_orin.sh
+bash scripts/run_pico_sim.sh --check
+
+# 3) 第一次先关窗口跑(排除 MuJoCo GUI 和 solver 抢 CPU,见 §17.6.1)
+bash scripts/run_pico_sim.sh --no-viewer
+
+# 4) 链路确认没问题之后再开窗口看画面
+bash scripts/run_pico_sim.sh
+```
+
+**跑的时候盯这四行**(其余都是噪音):
+
+```text
+[run] sender RUNNING                                  ← 头显在推流(不用按 A)
+[live] auto-calibrated from N live frames: ...        ← 标定成功(站直 1~2 秒别动)
+[live-chain] bridge is publishing (27 frames after 8s) ← bridge 真的在发,仿真才会启动
+[report] ... VERDICT: OK                              ← 源动作进到了参考
+```
+
+**出问题时按这个顺序查**:
+
+| 现象 | 去哪 |
+| --- | --- |
+| 卡在 `waiting for body tracking` | 头显/PC-Service(§17.1.1 的表),**不是 A 键** |
+| 没有 `auto-calibrated` | 标定没过:站直 1~2 秒,或看 `left_right_ok` |
+| `no A3_REFERENCE_V1 packet received yet` / `sim2sim exited with 1` | §17.6.1 |
+| `frames_published` 涨得很慢(<10/秒) | CPU 竞争:先 `--no-viewer`;§17.6.1 末尾 |
+| `VERDICT: SOURCE_STATIC` | 头显没跟踪到腿:`tools/probe_pico_body.py --expect legs`(§17.7) |
+| `VERDICT: OK` 但看着还是很僵 | 落在策略侧(§17.7 末尾) |
+
+一次运行的全部证据都在 `$A3WS/logs/sim_teleop/<时间戳>/`:`startup_info.txt`(git SHA/解释器/IP)、
+`pico_sender.log`、`retarget_live.log`、`sim2sim.log`、`live_frames.jsonl`、`metrics.json`。
+**要问人就直接把整个目录打包发过去**,不用再复述现象。
+
+---
+
 ### 17.1 仿真里的 PICO 遥操 —— `run_pico_sim.sh`
 
 ```bash
@@ -1088,6 +1137,51 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 
 **第一次跑之前先看 §17.4 的自检清单**(对几条就能判断修复有没有生效);§17.5 是 2026-09-28 这轮「按现象查根因」的完整对照表。
 
+---
+
+### 17.4 修复后应该看到的变化(自检清单)
+
+拉完代码第一次跑,对着这几条看,就知道修复有没有生效:
+
+```text
+[ ] scripts/run_pico_sim.sh --check
+      期望 11 ok / 0 failed,其中必须有:
+        [ OK ] headset is streaming body tracking (SDK sees body data)
+      若是 [FAIL] ... NO body data → 头显 App 掉了,重开 App(见 §17.1.1)
+
+[ ] 启动后终端里出现
+      [live] auto-calibrated from N live frames: ...
+      [live-chain] states [..., 'TRACKING', ...]
+      没有 TRACKING 就说明标定没过,先站直 1~2 秒别动
+
+[ ] 站着不动时,机器人应该是【手臂自然垂在身体两侧】
+      旧版本是【手臂向两边平举】(T-pose)。这是 §17.2.6 那个源动作问题的修复效果
+
+[ ] 走两步 → 机器人应该跟着【整体移动】
+      旧版本只会原地踏步(发送端根本没发位移)
+
+[ ] 状态栏不应频繁在 TRACKING/HOLD 之间跳
+      仍会偶发(solver ~21 Hz 是瓶颈),但比修复前(48% 丢帧)明显减少
+```
+
+---
+
+### 17.5 本轮修了什么(2026-09-28,按现象查)
+
+| 现象 | 根因 | 修在哪 |
+| --- | --- | --- |
+| 站立不动也**直接倒地**,root_err→1.24 m 但 joint_l1 正常 | 发送端发的 `body_quat_w` 是**机载 deploy 运行时**的调整后坐标系,而 UMR 要的是 SMPL-X 的 root 朝向;多出两个因子把整个人转歪 | `zmq_subscriber.sender_root_quat_to_smplx()`(精确还原,任意姿态误差 1e-16) |
+| 参考的骨盆**在地面上**(比机器人站的地方低 0.975 m) | 发送端不发 root 平移,bridge 兜底成 `[0,0,0]` | `DEFAULT_STANDING_PELVIS_HEIGHT_M`(缺 root 时重建为站立高度) |
+| 状态机**永远停在 CALIBRATION** | 自动标定只覆盖 `trajectory`/`recording`,`pico` 没有路径 | `retarget_live.py` 用 live 前 ~1.5 s 的帧自动标定 |
+| **走不动**,大步迈→原地踏步 | 发送端算了 `positions` 却丢弃,位移从未离开头显 | 发送端发布 `root_translation`(Z-up + 首帧锚定 + 站立高度) |
+| **手臂向两边平举** | 源动作生成器从 SMPL-X rest 骨架插值,而 rest 骨架手臂是 74–82°(几乎水平);retarget 忠实复现了它 | 生成器加**自然站姿**(手臂 9.5°/12° 下垂),全链重建 |
+| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | 发送端默认 30 Hz + `hold_after_ms` 50→150 ms(未根治,瓶颈在 solver) |
+| 膝**从来不弯** | 目标函数里膝无约束,foot 点云项主导 | UMR 实现 `solver.joint_map_cost` 膝姿态先验 |
+| 忘了按 A 键时**报 JSONDecodeError** | stats 里的 `None` 不是合法 JSON | `ast.literal_eval` 解析 |
+| SDK 编译在链接阶段失败 | `libPXREARobotSDK.so` 是 git-lfs 指针(133 字节) | `git lfs pull` |
+
+---
+
 ### 17.6 一条命令拿到全链路诊断(腿不动 / 走路不动时先跑这个)
 
 `run_pico_sim.sh` 现在**跑完会自动打印四层诊断**,并且把启动时的全部信息写进
@@ -1129,6 +1223,8 @@ $PY_BRIDGE tools/report_live_dump.py $A3WS/logs/sim_teleop/<时间戳>/live_fram
 # 不带参数则自动找最新一份
 ```
 
+---
+
 ### 17.6.1 仿真报 `no A3_REFERENCE_V1 packet received yet` / `sim2sim exited with 1`
 
 **2026-09-28 实测踩到**。真实时间线:
@@ -1157,6 +1253,8 @@ $PY_BRIDGE tools/report_live_dump.py $A3WS/logs/sim_teleop/<时间戳>/live_fram
 > 另外:真头显下 bridge 的**收包率**明显低于发送端的发包率(实测 bridge ~6 Hz vs 发送端 ~29 Hz)
 > —— solver 每帧 ~50 ms,仿真 GUI 一起来 CPU 竞争更重,接收线程会被饿到。
 > 如果看到 `frames_published` 长期不涨,先试 `--no-viewer`(关掉 MuJoCo 窗口)再看。
+
+---
 
 ### 17.7 「腿不动」怎么定位(一分钟,两种原因)
 
@@ -1201,44 +1299,7 @@ LeftLeg                  0.0388                 15.02  <-- focused
 这是官方 checkpoint 的跟踪特性;要真正解决得从策略侧入手(换/微调 policy),
 或者接受"腿部动作幅度远小于参考"这个前提,把验收改成同时看参考和**实际执行**的幅度。
 
-### 17.4 修复后应该看到的变化(自检清单)
-
-拉完代码第一次跑,对着这几条看,就知道修复有没有生效:
-
-```text
-[ ] scripts/run_pico_sim.sh --check
-      期望 11 ok / 0 failed,其中必须有:
-        [ OK ] headset is streaming body tracking (SDK sees body data)
-      若是 [FAIL] ... NO body data → 头显 App 掉了,重开 App(见 §17.1.1)
-
-[ ] 启动后终端里出现
-      [live] auto-calibrated from N live frames: ...
-      [live-chain] states [..., 'TRACKING', ...]
-      没有 TRACKING 就说明标定没过,先站直 1~2 秒别动
-
-[ ] 站着不动时,机器人应该是【手臂自然垂在身体两侧】
-      旧版本是【手臂向两边平举】(T-pose)。这是 §17.2.6 那个源动作问题的修复效果
-
-[ ] 走两步 → 机器人应该跟着【整体移动】
-      旧版本只会原地踏步(发送端根本没发位移)
-
-[ ] 状态栏不应频繁在 TRACKING/HOLD 之间跳
-      仍会偶发(solver ~21 Hz 是瓶颈),但比修复前(48% 丢帧)明显减少
-```
-
-### 17.5 本轮修了什么(2026-09-28,按现象查)
-
-| 现象 | 根因 | 修在哪 |
-| --- | --- | --- |
-| 站立不动也**直接倒地**,root_err→1.24 m 但 joint_l1 正常 | 发送端发的 `body_quat_w` 是**机载 deploy 运行时**的调整后坐标系,而 UMR 要的是 SMPL-X 的 root 朝向;多出两个因子把整个人转歪 | `zmq_subscriber.sender_root_quat_to_smplx()`(精确还原,任意姿态误差 1e-16) |
-| 参考的骨盆**在地面上**(比机器人站的地方低 0.975 m) | 发送端不发 root 平移,bridge 兜底成 `[0,0,0]` | `DEFAULT_STANDING_PELVIS_HEIGHT_M`(缺 root 时重建为站立高度) |
-| 状态机**永远停在 CALIBRATION** | 自动标定只覆盖 `trajectory`/`recording`,`pico` 没有路径 | `retarget_live.py` 用 live 前 ~1.5 s 的帧自动标定 |
-| **走不动**,大步迈→原地踏步 | 发送端算了 `positions` 却丢弃,位移从未离开头显 | 发送端发布 `root_translation`(Z-up + 首帧锚定 + 站立高度) |
-| **手臂向两边平举** | 源动作生成器从 SMPL-X rest 骨架插值,而 rest 骨架手臂是 74–82°(几乎水平);retarget 忠实复现了它 | 生成器加**自然站姿**(手臂 9.5°/12° 下垂),全链重建 |
-| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | 发送端默认 30 Hz + `hold_after_ms` 50→150 ms(未根治,瓶颈在 solver) |
-| 膝**从来不弯** | 目标函数里膝无约束,foot 点云项主导 | UMR 实现 `solver.joint_map_cost` 膝姿态先验 |
-| 忘了按 A 键时**报 JSONDecodeError** | stats 里的 `None` 不是合法 JSON | `ast.literal_eval` 解析 |
-| SDK 编译在链接阶段失败 | `libPXREARobotSDK.so` 是 git-lfs 指针(133 字节) | `git lfs pull` |
+---
 
 相关文档:`DEPLOY_TARGET_DECISION.md`(选型)· `ORIN_FULL_RUNBOOK.md`(姊妹篇)·
 `SIM_TELEOP.md`(仿真细节与判据)· `A3_ONBOARD.md`(机载与适配节点)·
