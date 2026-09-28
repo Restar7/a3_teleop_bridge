@@ -17,6 +17,7 @@ source "$BRIDGE_ROOT/scripts/env_orin.sh"
 DURATION=1800
 PUBLISH=1
 ENDPOINT="$A3_REF_ENDPOINT"
+STATS="$BRIDGE_ROOT/logs/orin_live/pipeline_stats.json"
 EXTRA=()
 
 while [ $# -gt 0 ]; do
@@ -28,7 +29,8 @@ while [ $# -gt 0 ]; do
     --save-calibration) EXTRA+=(--save-calibration "$2"); shift 2 ;;
     --no-auto-calibrate) EXTRA+=(--no-auto-calibrate); shift ;;
     --robot-config) EXTRA+=(--robot-config "$2"); shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    --stats) STATS="$2"; shift 2 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -42,9 +44,8 @@ echo "[orin] NOTE: the first frame needs a ~15 s UMR one-off initialisation; the
 echo "[orin]       machine stays in CALIBRATION until a session calibration exists."
 
 cd "$BRIDGE_ROOT"
-ARGS=(--source pico --backend umr-online --duration "$DURATION"
-      --stats "$BRIDGE_ROOT/logs/orin_live/pipeline_stats.json")
-mkdir -p "$BRIDGE_ROOT/logs/orin_live"
+mkdir -p "$(dirname "$STATS")"
+ARGS=(--source pico --backend umr-online --duration "$DURATION" --stats "$STATS")
 if [ "$PUBLISH" = 1 ]; then
   ARGS+=(--publish --endpoint "$ENDPOINT")
 else
