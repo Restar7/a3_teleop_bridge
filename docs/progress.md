@@ -798,7 +798,7 @@
   7. 已提交的产物与文档里的 `/inspire/...` 前缀统一改为 `$A3WS`(报告、PLAN、progress、README)。
 - **验证(全部实测)**:
   ```text
-  grep -RIn --exclude-dir=.git '/inspire/hdd/global_user\|wsc-workspace' .   → 无输出
+  grep -RIn --exclude-dir=.git '<机器专属工作区前缀>' .   → 无输出(前缀本身不在文档里复现,避免自匹配)
   git grep 两个仓库的 tracked 文件                                            → 无机器路径
   pytest tests integration -q                                                  → 见下方全套结果
   新建“伪装的另一台机器” /tmp/foreignws/{a3_teleop_bridge,sonic_for_a3->symlink,UMR->symlink}
