@@ -14,6 +14,36 @@
 
 ---
 
+## 速查:两条命令
+
+装好之后(§1–§5 走完),剩下就只有两件事,**各一条命令**:
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+
+# ① PICO 头显 → 仿真遥操(MuJoCo 里的 A3 跟着你动)
+bash scripts/run_pico_sim.sh
+
+# ② PICO 头显 → 真机(发布 A3_REFERENCE_V1,A3 侧订阅)
+bash scripts/run_robot_live.sh --a3-host <A3的IP> --duration 1800 --confirm-live
+```
+
+两条都先做前置自检(缺什么、怎么补都会直接打出来),都不需要你手动起第二个终端:
+
+| | ① 仿真 | ② 真机 |
+| --- | --- | --- |
+| 一条命令 | `scripts/run_pico_sim.sh` | `scripts/run_robot_live.sh` |
+| 只自检不起进程 | `scripts/run_pico_sim.sh --check` | `scripts/run_robot_live.sh --check` |
+| 头显不在手边 | `scripts/run_pico_sim.sh --replay $A3WS/recordings/all/m5_twist_torso_left` | — |
+| 内部链路 | PICO→online UMR→A3_REFERENCE_V1→A3-fast→**MuJoCo** | PICO→online UMR→A3_REFERENCE_V1→**A3 真机** |
+| 前置 | §17.1 | §17.2 + **A3 侧部署包**(要拷到机器人上) |
+| 详细章节 | §17.1 | §17.2 |
+
+**§17 是这两条的完整说明(前置、判据、故障、A3 侧命令)。** 下面的 §0–§16 是它们的前置:
+环境、模型、自检、以及不上头显也能跑的仿真 A/B 两层。
+
+---
+
 ## 0. 先认清这台机器(3 条命令,决定后面装哪个 torch)
 
 ```bash
@@ -507,16 +537,19 @@ bash install_scripts/install_pico_minimal.sh
 cd ../a3_teleop_bridge && bash scripts/check_orin_ready.sh      # 16/16
 .venv_bridge/bin/python -m pytest tests integration -q
 
-# ⑥ 仿真(PICO 遥操)
-cd ../sonic_for_a3 && .venv_pico_minimal/bin/python \
-    gear_sonic/scripts/pico_pose_zmq_minimal.py --port 5556 --start_unpaused
-cd ../a3_teleop_bridge && $PY_UMR tools/run_live_chain.py --pico \
-    --csv ~/a3_teleop_ws/logs/a3_validation/m5_twist_torso_left/m5_twist_torso_left.csv \
-    --policy-steps 3000 --duration 150
+# ⑥ 仿真里的 PICO 遥操(一条命令,内部起发送端 + 参考 + MuJoCo)
+cd ../a3_teleop_bridge && source scripts/env_orin.sh
+bash scripts/run_pico_sim.sh
+#   没头显也想验链路:bash scripts/run_pico_sim.sh --replay $A3WS/recordings/all/m5_twist_torso_left
+#   只自检:          bash scripts/run_pico_sim.sh --check
 
-# ⑦ 上机
-bash scripts/run_orin_live.sh --duration 1800 --endpoint tcp://0.0.0.0:5560
+# ⑦ 真机(一条命令;先 --check,--confirm-live 才会真的发布)
+#   前置:A3 侧 rockchip 部署包 + aarch64 ONNX Runtime + 适配节点 -> 见 §17.2.2
+bash scripts/run_robot_live.sh --check
+bash scripts/run_robot_live.sh --a3-host <A3的IP> --duration 1800 --confirm-live
 ```
+
+> **最后两步的完整说明在 §17**(前置、判据、A3 侧要拷贝的东西、安全闸)。
 
 ---
 
@@ -535,6 +568,13 @@ bash scripts/run_orin_live.sh --duration 1800 --endpoint tcp://0.0.0.0:5560
 | solver p50 突然 >100 ms | 没插电/没性能模式;后台跑了大任务;或 MuJoCo 与 UMR 抢 CPU(把 MuJoCo 挪到 4090) |
 | 关节动但部位/方向不对 | 关节顺序或镜像问题:先用录制回放复现,再查 `generated/a3_contract.json` 与 `coordinate_frames.md` |
 | `protoc` 缺失 | `sudo apt-get install -y protobuf-compiler libprotobuf-dev` |
+| `run_pico_sim.sh` 报 `xrobotoolkit_sdk missing` | PICO SDK 没装。**先 `git lfs pull`**(`libPXREARobotSDK.so` 是 LFS 文件),再 `cd $A3WS/sonic_for_a3 && PYTHON_BIN=python3.12 PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple bash install_scripts/install_pico_minimal.sh` |
+| SDK 编译在**链接**阶段失败 `file format not recognized ... treating as linker script` | `libPXREARobotSDK.so` 还是 133 字节的 LFS 指针:`git lfs pull --include="external_dependencies/.../lib/*"` |
+| 发送端起来了但日志没有 `Stream state: RUNNING` | 发送端默认 PAUSED:按手柄 **A** 键;或 PC Service 不在本机(它必须与发送端同机) |
+| `run_pico_sim.sh` 报 sim/UMR 解释器缺模块 | 本机用 conda:先 `export PY_BRIDGE=$PY_UMR=$PY_SIM=<你的python>`,见 §17.0 |
+| `run_robot_live.sh` 退出码 3 | 没给 `--confirm-live`(安全闸,防止误发动作到真机);自检通过后再加上 |
+| 真机侧连不上 5560 | 本机防火墙/交换机隔离,或 A3 侧 endpoint 写错;本机 `ss -tnp | grep 5560` 看有没有连接 |
+| `check_orin_ready.sh` 少了几项 `[ OK ]` | 解释器不存在时 3/5、4/5、5/5 三段会被跳过 —— 设 `PY_BRIDGE`/`PY_UMR` 指向真实解释器 |
 | `download_from_hf.py` 拉不动 | 在能上网的机器下好后 rsync `checkpoints/` 与 `gear_sonic_deploy/assets/` |
 
 ---
@@ -549,6 +589,261 @@ bash scripts/run_orin_live.sh --duration 1800 --endpoint tcp://0.0.0.0:5560
 | 机器人连接 | Type-C 或以太网(线缆/无线) | 机载供电 + Type-C/以太网 |
 | 算力 | 更强(UMR 更快、仿真可用 GPU) | 更弱但机载可靠 |
 | 其余命令 | **完全相同** | 完全相同 |
+
+## 17. 最后两步:各一条命令
+
+> §0–§16 走完(`check_orin_ready.sh` 16 ok / 0 failed,`pytest tests integration` 全绿)之后,
+> 剩下就是这两条。**两条都自带前置自检**,缺什么会直接告诉你补什么,不会静默失败。
+
+### 17.0 环境:本机用 conda,已经不需要任何 export
+
+`scripts/env_orin.sh` 的解释器解析顺序是:
+
+```text
+① 显式 PY_BRIDGE / PY_UMR / PY_SIM  ② runbook §3 建的 venv
+③ conda 环境(默认名 a3_bridge,可用 A3_CONDA_ENV=<name> 改)  ④ 当前 python3
+```
+
+本机三个 venv 都不存在,但 conda `a3_bridge` 里 numpy/scipy/zmq/torch/mujoco/onnxruntime
+已经齐了,所以 ③ 会自动生效 —— **直接 source 就能用,不用再 export 任何东西**:
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge
+source scripts/env_orin.sh
+# [env] PY_BRIDGE=/home/wusichen/miniconda3/envs/a3_bridge/bin/python
+# [env] PY_UMR=...
+# [env] PY_SIM=...
+# [env] note: project venvs absent; using conda env 'a3_bridge'      ← 就是这行
+
+bash scripts/check_orin_ready.sh      # 期望 16 ok, 0 failed(零配置)
+```
+
+> 只有 PICO 发送端(`.venv_pico_minimal`)是单独的,见 §17.1。
+> 想换解释器还是可以显式 `export PY_UMR=<你的python>`,优先级最高。
+
+---
+
+### 17.1 仿真里的 PICO 遥操 —— `run_pico_sim.sh`
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+bash scripts/run_pico_sim.sh                 # 直接开始遥操
+bash scripts/run_pico_sim.sh --check         # 只自检,不起进程
+bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
+bash scripts/run_pico_sim.sh --replay $A3WS/recordings/all/m5_twist_torso_left   # 没头显也能验链路
+```
+
+这一条命令内部起了**两个**进程,并在退出时一起收掉:
+
+```text
+① PICO 发送端  sonic_for_a3/gear_sonic/scripts/pico_pose_zmq_minimal.py --port 5556 --start_unpaused
+② 参考 + 仿真  tools/run_live_chain.py --pico --port 5560
+     ├ retarget_live --source pico --backend umr-online --publish   (PICO→online UMR→A3_REFERENCE_V1)
+     └ sim2sim_a3_mujoco  --reference-source stream --realtime      (A3-fast 50 Hz → MuJoCo)
+```
+
+**前置(脚本会逐条自检)**
+
+```text
+[ ] §1–§5 已完成:三仓库、模型/checkpoint、SMPL-X、check_orin_ready.sh 全绿
+[ ] XRoboToolkit PC Service **跑在本机**(头显连它;端口默认 63901)
+[ ] 头显与本机同一 Wi-Fi;头显开发者模式已开
+[ ] PICO SDK 装好(本机已装;换机器/重装时):
+      cd $A3WS/sonic_for_a3
+      # ① 先确认 LFS 二进制真的拉下来了(见下方"坑 1")
+      git lfs pull --include="external_dependencies/XRoboToolkit-PC-Service-Pybind_X86_and_ARM64/lib/*"
+      # ② 默认找 python3.10;本机用 3.12。PyPI 不通时加国内镜像(实测清华/阿里/中科大可用):
+      PYTHON_BIN=python3.12 PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+        bash install_scripts/install_pico_minimal.sh
+      .venv_pico_minimal/bin/python -c "import xrobotoolkit_sdk as xrt; print('sdk ok')"
+```
+
+> **坑 1(本机踩过,值得记住)**:`libPXREARobotSDK.so` 是 **git-lfs 文件**。
+> 如果当初 clone 时没拉 LFS,这个文件只有 133 字节(一个文本指针),SDK 编译会在
+> **链接阶段**失败,报 `file format not recognized ... treating as linker script` ——
+> 看起来像编译器/环境问题,其实是**缺二进制**。一条命令修:
+> ```bash
+> cd $A3WS/sonic_for_a3
+> git lfs pull --include="external_dependencies/XRoboToolkit-PC-Service-Pybind_X86_and_ARM64/lib/*"
+> ls -l external_dependencies/XRoboToolkit-PC-Service-Pybind_X86_and_ARM64/lib/libPXREARobotSDK.so
+> # 期望 ~23.7 MB 的 ELF;若是 133 字节就是指针,没拉下来
+> ```
+>
+> **坑 2**:SDK 的 CMake 用 `find_package(pybind11)`。手动 `cmake` 编译时要给
+> `-Dpybind11_DIR=$(python -m pybind11 --cmakedir)`;用官方 `install_pico_minimal.sh`
+> 则不用管(pip 的构建隔离会处理)。
+
+```text
+[ ] 参考端口 5560 空闲、PICO 端口 5556 空闲(脚本会查)
+```
+
+**判据(逐条看)**
+
+```text
+PICO 发送端       日志出现 "Stream state: RUNNING" 且 sent 递增
+                  没出现 → 按手柄 A 键(发送端默认 PAUSED),或查 PC Service 是否在本机
+T2 状态机         DISCONNECTED → CALIBRATION → TRACKING
+T2 rejected       0
+T2 solver p50     30–60 ms(5060 比 Orin 快;本机实测 36–48 ms)
+T3 fall           false
+T3 root z         ≈1.07 m
+视觉              抬右臂→右臂抬;转体→腰转
+```
+
+**第一批动作(严格按序,方案 §45)**
+
+```text
+1 站立 → 2 轻微摆臂 → 3 单臂抬起 → 4 双臂抬起
+5 慢速屈膝 → 6 左右重心转移 → 7 轻微抬脚 → 8 慢速迈一步
+禁止:跳跃 / 快跑 / 深蹲到底 / 跪 / 躺 / 大幅单腿站立 / 快速 180° 旋转
+```
+
+**随时可停**:`Ctrl-C` 即可 —— 发送端会被一起收掉;参考停发后 MuJoCo 侧 50 ms hold、
+250 ms safe stop,机器人保持站立(期望行为)。
+
+**产物**
+
+```text
+$A3WS/logs/sim_teleop/<时间戳>/
+   pico_sender.log      发送端日志(看 RUNNING / sent)
+   retarget_live.log    参考侧日志(看状态机 / rejected / solver p50)
+   sim2sim.log          MuJoCo 侧日志
+   metrics.json         fall / root z / RMSE(29)
+   live_chain_report.json   链路判定(ACCEPTED 才算过)
+```
+
+> **没接上头显时是安全的**:第一个参考窗口到之前,SIM 用 motion 首帧当站立占位,
+> 最多等 30 s,策略照常 50 Hz 跑、机器人站着。超时后日志直接告诉你
+> `is the PICO sender RUNNING (--start-unpaused or the controller's A button) on port 5556?`
+> 实测(本机无头显、无 PC Service):
+>
+> ```text
+> [live-chain] fall=False root_z=1.0702  published=0
+> [live-chain] NOT ACCEPTED -- 2 problem(s):
+>   - pipeline published nothing
+>   - no reference was ever published: is the PICO sender RUNNING
+>     (--start_unpaused or the controller's A button) on port 5556?
+> ```
+>
+> 发送端那边的日志会停在 `initialize sdk,connect127.0.0.1:60061` ——
+> **那个端口就是本机 PC Service 的地址**,起没起服务一看便知。
+
+---
+
+### 17.2 真机 —— `run_robot_live.sh`
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+bash scripts/run_robot_live.sh --check                         # 先自检(不会发任何东西)
+bash scripts/run_robot_live.sh --a3-host 10.42.10.12 --duration 1800 --confirm-live
+```
+
+方向:**本机发布、A3 订阅**。本机 bind `tcp://0.0.0.0:5560`,A3 侧连
+`tcp://<本机IP>:5560`;脚本会自己打出本机 LAN IP,并 `ping` 一下 `--a3-host`。
+
+**安全闸**:不给 `--confirm-live` 直接拒绝启动;给了还会打印 A→G 清单并要求输入 `GO`
+(想跳过交互加 `--yes`,适合脚本化)。这是防止误发动作到真机的最后一道手工闸。
+
+#### 17.2.1 本机前置
+
+```text
+[ ] §17.1 的仿真已经在 MuJoCo 里跑通(没过仿真不上真机,方案 §13/§85)
+[ ] XRoboToolkit PC Service + 头显就绪(和仿真同一条 PICO 链路)
+[ ] 本机与 A3/HDU 网络互通:ip -4 addr show | grep inet ; ping -c 3 <A3的IP>
+[ ] 端口 5560/tcp 没被防火墙/交换机隔离
+[ ] SMPL-X 模型在位;§17.0 的解释器变量已导出
+```
+
+#### 17.2.2 A3 侧前置(**需要拷东西到机器人上**,只做一次)
+
+这一段是「要下到对应实际机子」的部分。在**本机**交叉编译出 rockchip 包:
+
+```bash
+cd $A3WS/sonic_for_a3
+
+# ① 构建输入:Rockchip sysroot(HuggingFace)
+python download_from_hf.py --component sysroot
+(cd gear_sonic_deploy/thirdparty/rockchip_sysroot && \
+  sha256sum -c rockchip-1.0-aarch64-sysroot.tar.gz.sha256)
+
+# ② aarch64 ONNX Runtime(仓库不附带,必须自己准备一个 tar.gz)
+export A3_ONNXRUNTIME_AARCH64_TARBALL='/absolute/path/onnxruntime-aarch64-1.19.2.tar.gz'
+
+# ③ 交叉编译 rockchip 部署包(x86 包只能自检,rockchip 包才是上机的)
+gear_sonic_deploy/scripts/build_a3_deploy_pkg.sh \
+  --arch rockchip --jobs 20 \
+  --onnxruntime-aarch64-tarball "$A3_ONNXRUNTIME_AARCH64_TARBALL" \
+  --runtime-cfg gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/config/a3_runtime_config.yaml
+
+# ④ 还有模型权重(RKNN)与我们的适配节点
+.venv_sim/bin/python download_from_hf.py --component pt onnx rknn
+```
+
+传到机器人(HDU 只当跳板):
+
+```bash
+rsync -avP <pkg-dir>/ <user>@<hdu>:/tmp/a3_pkg/
+ssh <hdu> "rsync -avP /tmp/a3_pkg/ <mdu-user>@<mdu>:/agibot/<sonic-package-root>/"
+```
+
+**在 MDU 上**(官方 runtime 照旧,我们只把参考流接进它已经在消费的入口):
+
+```bash
+cd /agibot/software/v0/config/sm
+sudo cp -a sm_config.yaml "sm_config.yaml.before_sonic_$(date +%Y%m%d_%H%M%S)"
+sudoedit sm_config.yaml        # Motion 功能组里把含 "mc" 的列表改成 [ "agent" ]
+sudo systemctl restart agibot_pm
+# 等约 3 分钟
+systemctl is-active --quiet agibot_pm && echo OK
+ps aux | grep '[m]otion_control'      # 必须无输出
+```
+
+然后起**适配节点**:把 `A3_REFERENCE_V1` 转成官方 runtime 已经在读的
+`/ta/whole_body_command`(`q_mujoco[29] / dq_mujoco[29] / head_q[2]`)。
+关节顺序必须用 `generated/a3_contract.json` 的 `policy_to_il_index` 置换 ——
+**禁止 `qpos[7:36]` 这种切片**。完整步骤见 `A3_ONBOARD.md` §4–§8。
+
+先做 **receive-only 预检**(不发布电机命令),确认能收到参考帧再进下一步:
+
+```bash
+# MDU 上,适配节点 --receive-only;本机这时用 --check 或先不 --confirm-live
+```
+
+#### 17.2.3 上线(悬吊 + 10 级动作)
+
+```text
+[ ] 安全吊带/防坠已挂,物理急停在手,安全员在场,清场
+[ ] 先发站立,再按 §17.1 的 8 步动作**分级**做
+[ ] 任何异常:松手/急停 —— 参考停发后 A3 侧 50 ms hold、250 ms safe stop
+```
+
+`Ctrl-C` 停止发布。跑完把结果追加到 `docs/progress.md`(`A3_ONBOARD.md` §12 有记录模板)。
+
+#### 17.2.4 判据
+
+```text
+本机 客户端连接数       ≥1(ss -tnp | grep 5560)
+本机 frames_published   线性增长
+本机 rejected           0
+本机 solver p50         ≤50 ms(>100 ms 就先插电+性能模式,见 §13)
+A3   receive-only       seq 单调、无 rejected
+A3   首次动作           站立保持、无抖动;再做分级动作
+```
+
+> **兜底**:5060 上 UMR 跟不上时,把参考侧整条搬到 4090(§12.3),
+> A3 的 `--reference-endpoint` 改成 4090 的 IP 即可,协议与 A3 侧完全不变。
+
+---
+
+### 17.3 剩余步骤一览
+
+| 步骤 | 命令/入口 | 状态 |
+| --- | --- | --- |
+| §0–§5 环境/模型/自检 | 见本文 | ✅ 本机已完成(`check_orin_ready.sh` 16/0) |
+| 仿真 A/B(无头显) | `run_a3_validation_suite.py` / `run_live_chain.py --recording` | ✅ 9/9 与 ACCEPTED(见 `mujoco_validation.md`) |
+| **仿真 C(真头显)** | **`bash scripts/run_pico_sim.sh`** | ⏳ 需 PC Service + 头显 |
+| **真机** | **`bash scripts/run_robot_live.sh --confirm-live`** | ⏳ 需 A3 侧部署包 + 悬吊 + 安全员 |
+| 可选:官方 AimSim | §8 | 需 AimDK 的 `aimsim` wheel,未做 |
 
 相关文档:`DEPLOY_TARGET_DECISION.md`(选型)· `ORIN_FULL_RUNBOOK.md`(姊妹篇)·
 `SIM_TELEOP.md`(仿真细节与判据)· `A3_ONBOARD.md`(机载与适配节点)·

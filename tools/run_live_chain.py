@@ -35,6 +35,33 @@ sys.path.insert(0, str(BRIDGE_ROOT / "src"))
 from a3_teleop_bridge.contract import load_contract  # noqa: E402
 
 
+def parse_stream_stats(sim_log: str) -> dict:
+    """The ``[reference-stream] {...}`` dict the SONIC consumer prints.
+
+    It is a *Python* dict repr, so it can contain ``None`` (``last_seq`` is None
+    until the first packet arrives).  ``json.loads`` with the usual quote swap
+    cannot parse that, which used to turn the most common operator mistake --
+    starting the chain while the PICO sender is still PAUSED -- into a
+    JSONDecodeError traceback instead of the "is the PICO sender RUNNING?"
+    message.  Parse it as the Python literal it is, and never raise.
+    """
+    import ast
+    import re
+
+    if not sim_log:
+        return {}
+    # last match wins: earlier lines may be the startup-pose warning
+    matches = re.findall(r"\[reference-stream\] (\{.*\})", sim_log)
+    for candidate in reversed(matches):
+        try:
+            value = ast.literal_eval(candidate)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
 def find_sim_python(sonic_root: Path, explicit: str | None) -> Path:
     """Interpreter that has mujoco+torch for the SONIC sim2sim consumer.
 
@@ -180,10 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         else {}
     )
     sim_log = (out_dir / "sim2sim.log").read_text(encoding="utf-8", errors="replace")
-    import re
-
-    match = re.search(r"\[reference-stream\] (\{.*\})", sim_log)
-    stream_stats = json.loads(match.group(1).replace("'", '"')) if match else {}
+    stream_stats = parse_stream_stats(sim_log)
 
     problems = []
     if proc.returncode != 0:

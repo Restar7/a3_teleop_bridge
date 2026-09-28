@@ -7,20 +7,16 @@ set -euo pipefail
 
 BRIDGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WS_ROOT="${WS_ROOT:-$(dirname "$BRIDGE_ROOT")}"
-# A pre-exported PY_BRIDGE / PY_UMR wins over the venv defaults that env_orin.sh
-# sets, so a machine that runs the stack out of a conda env gets the *same* gate
-# (including the import / zmq / online-UMR smoke sections, which are skipped
-# whenever the interpreter is missing) instead of a silently thinner report.
-PY_BRIDGE_OVERRIDE="${PY_BRIDGE:-}"
-PY_UMR_OVERRIDE="${PY_UMR:-}"
+# env_orin.sh already resolves PY_BRIDGE / PY_UMR with the full precedence
+# (explicit override > project venv > conda env > python3), so just keep what it
+# picked.  Re-deriving the venv path here is what used to make this gate silently
+# skip its import / zmq / online-UMR sections on a conda-only machine.
+PY_UMR_WAS_SET="${PY_UMR:-}"
 # shellcheck source=/dev/null
 [ -f "$BRIDGE_ROOT/scripts/env_orin.sh" ] && source "$BRIDGE_ROOT/scripts/env_orin.sh" >/dev/null
 
-
 SONIC_ROOT="${SONIC_A3_ROOT:-$WS_ROOT/sonic_for_a3}"
 UMR_ROOT="${UMR_ROOT:-$WS_ROOT/UMR}"
-PY_BRIDGE="${PY_BRIDGE_OVERRIDE:-$BRIDGE_ROOT/.venv_bridge/bin/python}"
-PY_UMR="${PY_UMR_OVERRIDE:-$UMR_ROOT/.venv_umr/bin/python}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,7 +26,10 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$PY_UMR_OVERRIDE" ] || PY_UMR="$UMR_ROOT/.venv_umr/bin/python"
+# honour --umr-root without clobbering an explicit/conda interpreter
+if [ -z "$PY_UMR_WAS_SET" ] && [ -x "$UMR_ROOT/.venv_umr/bin/python" ]; then
+  PY_UMR="$UMR_ROOT/.venv_umr/bin/python"
+fi
 
 ok=0; bad=0
 check() { # check <label> <cmd...>

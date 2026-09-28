@@ -1,0 +1,111 @@
+"""The runbook's two one-command entry points must stay runnable.
+
+docs/5060_FULL_RUNBOOK.md §17 promises exactly two commands for the two
+remaining steps (PICO teleoperation in simulation, and the real robot).  These
+tests keep that promise honest: the scripts exist, are executable, are valid
+bash, document their modes, and their preflight actually runs to a verdict
+instead of dying halfway.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+BRIDGE_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = {
+    "run_pico_sim.sh": ["--check", "--replay", "--duration", "--policy-steps"],
+    "run_robot_live.sh": ["--check", "--a3-host", "--confirm-live", "--duration"],
+}
+
+
+@pytest.mark.parametrize("name", sorted(SCRIPTS))
+def test_entry_point_is_executable_bash(name):
+    path = BRIDGE_ROOT / "scripts" / name
+    assert path.is_file(), f"{path} is missing (docs/5060_FULL_RUNBOOK.md 17 relies on it)"
+    assert path.stat().st_mode & 0o111, f"{path} is not executable"
+    proc = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+
+
+@pytest.mark.parametrize("name,flags", sorted(SCRIPTS.items()))
+def test_entry_point_documents_its_modes(name, flags):
+    proc = subprocess.run(
+        ["bash", str(BRIDGE_ROOT / "scripts" / name), "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    for flag in flags:
+        assert flag in proc.stdout, f"{name} --help does not mention {flag}"
+
+
+@pytest.mark.parametrize("name", sorted(SCRIPTS))
+def test_preflight_reaches_a_verdict(name):
+    """`--check` must run every section and print a verdict.
+
+    A missing interpreter or a missing optional asset is allowed (returncode 1);
+    what must not happen is the script dying part-way with no verdict.
+    """
+    proc = subprocess.run(
+        ["bash", str(BRIDGE_ROOT / "scripts" / name), "--check"],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode in (0, 1), f"{name} --check exited {proc.returncode}\n{proc.stderr[-2000:]}"
+    assert "[preflight]" in proc.stdout
+    assert " ok, " in proc.stdout, proc.stdout[-2000:]
+
+
+def test_robot_script_refuses_to_publish_without_confirmation():
+    """The go-live gate is the last thing between a test run and a real robot."""
+    source = (BRIDGE_ROOT / "scripts" / "run_robot_live.sh").read_text(encoding="utf-8")
+    assert "--confirm-live" in source
+    assert "refusing to publish motion to a real robot" in source
+    assert 'exit 3' in source
+    # and it must not silently default to publishing
+    assert "CONFIRM_LIVE=0" in source
+
+
+def test_runbook_links_the_entry_points():
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "scripts/run_pico_sim.sh" in runbook
+    assert "scripts/run_robot_live.sh" in runbook
+
+
+def _live_chain_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_live_chain", BRIDGE_ROOT / "tools" / "run_live_chain.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_stream_stats_parser_survives_python_none():
+    """The no-headset path must report guidance, not raise.
+
+    SONIC prints the stream stats as a *Python* dict.  ``last_seq`` is ``None``
+    until the first packet arrives, so the old ``json.loads(text.replace("'",
+    '"'))`` raised JSONDecodeError exactly when the operator had forgotten to
+    unpause the PICO sender -- the single most common start-up mistake.
+    """
+    module = _live_chain_module()
+    log = (
+        "[reference-stream] no A3_REFERENCE_V1 packet yet; holding the startup pose "
+        "for up to 30 s (is the PICO sender RUNNING and the bridge publishing?)\n"
+        "[reference-stream] {'received': 0, 'rejected': 0, 'dropped': 0, 'jumps': 0, "
+        "'max_jump_ms': 0.0, 'interpolated': 0, 'max_gap_ms': 0.0, 'last_seq': None, "
+        "'last_reason': '', 'latency_p50_ms': None, 'latency_p95_ms': None}\n"
+    )
+    stats = module.parse_stream_stats(log)
+    assert stats["received"] == 0
+    assert stats["last_seq"] is None
+    assert module.parse_stream_stats("") == {}
+    assert module.parse_stream_stats("[reference-stream] {not a dict}") == {}
+    assert module.parse_stream_stats("[reference-stream] {'received': 7, 'last_seq': 42}")["last_seq"] == 42
