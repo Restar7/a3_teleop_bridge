@@ -741,6 +741,24 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 
 `run_pico_sim.sh` 会替你走完 A 的检查,并在发送端卡住 15 s 后**直接把上面这张表打出来**。
 
+**⚠️ 真发送端的 root 姿态约定和录制不一致(2026-09-28 第二次实测)**
+
+头显发送端发的是**机载 deploy 运行时的"调整后 root 局部系"**:
+
+```text
+body_quat_w = (Y_TO_Z_UP ⊗ xr_root ⊗ R_y(180°)) ⊗ SMPL_BASE_ROT_CONJ     ← 发送端
+root_quat   =  Y_TO_Z_UP ⊗ xr_root                                      ← 录制/离线/UMR 期望
+```
+
+而 `sequence_from_frame` 把 `body_quat_w` **直接当 SMPL-X 的 root 旋转**喂给 UMR。
+多出来的两个因子把整个人转歪 → 参考 root 离机器人 1.24 m → 0.8 s 倒地,
+而 **joint_l1 一直只有 0.22–0.35 rad(关节其实是好的)**。
+
+症状辨识:站立不动也倒、`root_err` 单调涨到 ~1.24 m、`joint_l1` 正常。
+现在 bridge 在 live 边界(`zmq_subscriber`)做精确还原(对任意姿态误差 1e-16,
+站立时正好还原成录制里的 `[0.7071, 0.7071, 0, 0]`)。录制的 frame 里是**已转换过**的,
+所以只作用于 live,`--replay` 不受影响。
+
 **⚠️ live PICO 的 root 是重建出来的(2026-09-28 实测踩过)**
 
 头显发送端的 payload 只有三个字段,全是对 root 相对的局部量:

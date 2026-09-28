@@ -280,3 +280,66 @@ def test_live_pico_has_an_auto_calibration_path():
     assert "auto-calibrated from" in source
     # and it must actually attach the calibration to the pipeline
     assert "pipeline.calibration = SessionCalibration.from_frames" in source
+
+
+def test_sender_root_frame_is_converted_to_the_smplx_convention():
+    """The deploy-runtime root frame must not reach UMR unchanged.
+
+    pico_pose_zmq_minimal.py publishes
+        body_quat_w = (Y_TO_Z_UP x xr_root x R_y(180)) x SMPL_BASE_ROT_CONJ
+    while the offline path, make_synthetic_pico_recording.py and every
+    validated recording mean
+        root_quat = Y_TO_Z_UP x xr_root
+    Feeding the former to UMR rotates the whole body and tipped the robot over
+    0.8 s into the first real headset run (root_err 1.24 m, joints fine).
+    """
+    import numpy as np
+
+    from a3_teleop_bridge.pico.zmq_subscriber import (
+        PicoPoseSubscriber,
+        R_Y_180_INV_WXYZ,
+        SMPL_BASE_ROT_CONJ_INV,
+        Y_TO_Z_UP_QUAT_WXYZ,
+        decode_packed_message,
+        quat_mul_wxyz,
+        sender_root_quat_to_smplx,
+    )
+
+    # a standing operator: the sender emits a 90 deg rotation about Z
+    sender_value = np.array([0.7071067811865476, 0.0, 0.0, 0.7071067811865476])
+    converted = sender_root_quat_to_smplx(sender_value)
+    # ... which must come out as the +90 deg X base rotation the recordings carry
+    assert np.allclose(np.abs(converted), np.abs([0.7071067811865476, 0.7071067811865476, 0.0, 0.0]), atol=1e-9)
+
+    # exact for arbitrary root poses, against the sender's own formula
+    rs = np.random.RandomState(1)
+    for _ in range(8):
+        xr = rs.randn(4)
+        xr /= np.linalg.norm(xr)
+        root_quat = quat_mul_wxyz(xr, np.array([0.0, 0.0, 1.0, 0.0]))  # xr * R_y(180)
+        sender_out = quat_mul_wxyz(quat_mul_wxyz(Y_TO_Z_UP_QUAT_WXYZ, root_quat),
+                                   np.array([0.5, -0.5, -0.5, -0.5]))
+        expected = quat_mul_wxyz(Y_TO_Z_UP_QUAT_WXYZ, xr)
+        got = sender_root_quat_to_smplx(sender_out)
+        assert min(np.abs(got - expected).max(), np.abs(got + expected).max()) < 1e-9
+    # and the two constants really are each other's inverse
+    assert np.allclose(quat_mul_wxyz(SMPL_BASE_ROT_CONJ_INV, np.array([0.5, -0.5, -0.5, -0.5])), [1, 0, 0, 0])
+    assert np.allclose(quat_mul_wxyz(R_Y_180_INV_WXYZ, np.array([0.0, 0.0, 1.0, 0.0])), [1, 0, 0, 0])
+
+    # the frame built from a live packet carries the converted value
+    sub = PicoPoseSubscriber.__new__(PicoPoseSubscriber)
+    frame = sub._build_smpl_frame(
+        decode_packed_message(
+            pack_like_official(
+                {
+                    "smpl_pose": np.zeros((1, SMPL_POSE_COUNT, 3), np.float32),
+                    "smpl_joints": np.zeros((1, SMPL_JOINT_COUNT, 3), np.float32),
+                    "body_quat_w": sender_value.astype(np.float32),
+                }
+            )
+        ),
+        0,
+        1,
+        2,
+    )
+    assert np.allclose(np.abs(frame.body_quat_w), np.abs(converted), atol=1e-6)

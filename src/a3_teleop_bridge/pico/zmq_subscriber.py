@@ -41,6 +41,60 @@ DEFAULT_TOPIC = b"pose"
 #: retarget is handed a human lying on the floor and the reference drives the
 #: robot down.  Override with A3_PICO_STANDING_PELVIS_M or `standing_pelvis_m`.
 DEFAULT_STANDING_PELVIS_HEIGHT_M = 0.975
+
+# ---------------------------------------------------------------------------
+# Root-orientation convention bridge.
+#
+# pico_pose_zmq_minimal.py publishes body_quat_w in the *deploy runtime's*
+# adjusted root-local frame:
+#
+#     body_quat_w = (Y_TO_Z_UP  x  xr_root  x  R_y(180 deg))  x  SMPL_BASE_ROT_CONJ
+#
+# (see _compute_local_smpl_from_xrt: global_rots = xr_root * R_y(180), then
+#  root_quat_zup = Y_TO_Z_UP * root, then body = root_quat_zup * BASE_CONJ).
+#
+# What the rest of this project means by "the root orientation" -- and what the
+# offline SMPL-X path, make_synthetic_pico_recording.py and every validated
+# recording contain -- is
+#
+#     root_quat = Y_TO_Z_UP  x  xr_root
+#
+# i.e. the +90 deg X rotation that stands the Y-up SMPL skeleton up in a Z-up
+# world, with the operator's heading on top.  Feeding the deploy-frame value
+# straight into UMR rotates the whole body by the two trailing factors, which is
+# what tipped the robot over 0.8 s into the first real headset run: the live
+# reference root sat 1.24 m from the robot while the joints tracked fine.
+#
+# Undoing the two trailing factors is exact for any root pose (verified to 1e-16
+# against the sender's own _quat_multiply_wxyz over random orientations); for a
+# standing operator it reproduces the recording's [0.7071, 0.7071, 0, 0].
+# ---------------------------------------------------------------------------
+Y_TO_Z_UP_QUAT_WXYZ = np.array([0.7071067811865476, 0.7071067811865476, 0.0, 0.0])
+SMPL_BASE_ROT_CONJ_WXYZ = np.array([0.5, -0.5, -0.5, -0.5])
+SMPL_BASE_ROT_CONJ_INV = np.array([0.5, 0.5, 0.5, 0.5])
+R_Y_180_INV_WXYZ = np.array([0.0, 0.0, -1.0, 0.0])
+
+
+def quat_mul_wxyz(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Hamilton product in (w, x, y, z) order."""
+    w1, x1, y1, z1 = (float(v) for v in np.asarray(a).reshape(4))
+    w2, x2, y2, z2 = (float(v) for v in np.asarray(b).reshape(4))
+    return np.array(
+        [
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        ],
+        dtype=np.float64,
+    )
+
+
+def sender_root_quat_to_smplx(body_quat_w: np.ndarray) -> np.ndarray:
+    """Convert the A3 sender's body_quat_w into the SMPL-X root orientation."""
+    q = quat_mul_wxyz(body_quat_w, SMPL_BASE_ROT_CONJ_INV)
+    q = quat_mul_wxyz(q, R_Y_180_INV_WXYZ)
+    return q / max(float(np.linalg.norm(q)), 1e-12)
 DTYPE_MAP = {"f32": "<f4", "f64": "<f8", "i32": "<i4", "i64": "<i8", "bool": "?"}
 
 __all__ = [
@@ -353,6 +407,10 @@ class PicoPoseSubscriber:
                 root_source = "synthesized_standing"
         self.last_root_source = root_source
 
+        # The packet carries the deploy-runtime frame; convert it to the SMPL-X
+        # root orientation the rest of the pipeline (and UMR) expects.
+        body_quat_for_pipeline = sender_root_quat_to_smplx(root_quat)
+
         wrist = fields.get("wrist_joint_pos")
         frame = HumanSmplFrame(
             seq=seq,
@@ -361,9 +419,7 @@ class PicoPoseSubscriber:
             smpl_pose=pose,
             root_translation=root_translation,
             root_quat_wxyz=root_quat,
-            body_quat_w=np.asarray(fields["body_quat_w"], dtype=np.float64).reshape(-1, 4)[-1]
-            if "body_quat_w" in fields
-            else None,
+            body_quat_w=body_quat_for_pipeline if "body_quat_w" in fields else None,
             wrist_joint_pos=np.asarray(wrist, dtype=np.float64).reshape(-1)[:6]
             if wrist is not None
             else None,
