@@ -22,6 +22,10 @@ WS_ROOT="${WS_ROOT:-$(dirname "$BRIDGE_ROOT")}"
 PYTHON="${PYTHON:-python3}"
 WITH_UMR=0
 CHECK_ONLY=0
+# Default index.  NOTE: an RTX 50-series (Blackwell, compute capability 12.0) card
+# needs a CUDA >= 12.8 build (cu128/cu129/cu130); the legacy cu121 wheels have no
+# sm_120 kernels.  This only matters for GPU work (the MuJoCo policy simulation) --
+# the reference chain itself runs on CPU.
 TORCH_INDEX="${TORCH_INDEX:-https://download.pytorch.org/whl/cu121}"
 
 while [ $# -gt 0 ]; do
@@ -42,7 +46,11 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "  MISSING: $1"; fail=1; }; }
 echo "[bootstrap] checking base tooling"
 for tool in git tar rsync curl; do need "$tool"; done
 "$PYTHON" -c "import venv" 2>/dev/null || { echo "  MISSING: python3-venv"; fail=1; }
-[ "$(uname -m)" = "aarch64" ] && echo "  arch: aarch64 (Jetson)" || echo "  WARNING: arch is $(uname -m), not aarch64 -- this is not an Orin"
+case "$(uname -m)" in
+  aarch64) echo "  arch: aarch64 (Jetson Orin)" ;;
+  x86_64)  echo "  arch: x86_64 -- fine for a 5060/4090 deployment machine (same runbook)" ;;
+  *)       echo "  WARNING: unexpected arch $(uname -m)" ;;
+esac
 
 if [ "$fail" != 0 ]; then
   echo "[bootstrap] install the missing base packages first (apt-get install ...)" >&2
@@ -70,7 +78,15 @@ if [ "$WITH_UMR" = 1 ]; then
   echo "[bootstrap] creating $UMR_ROOT/.venv_umr"
   "$PYTHON" -m venv "$UMR_ROOT/.venv_umr"
   "$UMR_ROOT/.venv_umr/bin/python" -m pip install --upgrade pip wheel >/dev/null
-  echo "[bootstrap] torch from $TORCH_INDEX (use the wheel that matches this JetPack!)"
+  CAP="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')"
+  if [ -n "$CAP" ] && awk "BEGIN{exit !($CAP >= 12.0)}" && [ "$TORCH_INDEX" = "https://download.pytorch.org/whl/cu121" ]; then
+    echo "[bootstrap] WARNING: this GPU reports compute capability $CAP (Blackwell)."
+    echo "[bootstrap]          cu121 wheels have no sm_120 kernels -- for the MuJoCo policy"
+    echo "[bootstrap]          simulation re-run with e.g.:"
+    echo "[bootstrap]            TORCH_INDEX=https://download.pytorch.org/whl/cu130 bash scripts/orin_bootstrap.sh --with-umr"
+    echo "[bootstrap]          (the reference chain itself does not need CUDA)"
+  fi
+  echo "[bootstrap] torch from $TORCH_INDEX (JetPack: match it; Blackwell/x86: cu128+)"
   "$UMR_ROOT/.venv_umr/bin/python" -m pip install torch --index-url "$TORCH_INDEX"
   "$UMR_ROOT/.venv_umr/bin/python" -m pip install -r "$UMR_ROOT/requirements-umr.txt"
   echo "[bootstrap] installing the bridge into the UMR venv (the online session imports it)"
@@ -106,3 +122,5 @@ echo "[bootstrap] contract check"
   --sonic-root "${SONIC_A3_ROOT:-$WS_ROOT/sonic_for_a3}" || true
 echo
 echo "[bootstrap] done. next: bash scripts/orin_preflight.sh && bash scripts/check_orin_ready.sh"
+echo "[bootstrap] (script names say \"orin\" for historical reasons: they are machine-agnostic --"
+echo "[bootstrap]  the same commands run on a 5060/4090 deployment machine, see docs/ORIN_FULL_RUNBOOK.md section 13)"

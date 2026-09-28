@@ -1,11 +1,22 @@
-# ORIN_FULL_RUNBOOK.md — Orin 从零到推理:克隆 / 环境 / 仿真 / 上机
+# ORIN_FULL_RUNBOOK.md — 部署机从零到推理:克隆 / 环境 / 仿真 / 上机
 
-> 一条主线,全部命令可直接复制:**Orin 开箱 → clone 三个仓库 → 建环境 → 下模型 → 自检 →
+> ## 📌 这份手册对 **Jetson Orin 和 RTX 5060(以及任何 x86 Linux)都适用**
+> 命令完全一样,只有 4 处差别 → 见 **§13**。
+> 一句话:**"部署机是谁"不影响任何命令** —— 脚本名里的 `orin` 只是历史命名,
+> 所有脚本都按自身位置推导路径,并自动识别 x86_64 / aarch64。
+>
+> | 你手上是 | 怎么做 |
+> | --- | --- |
+> | **只有 5060** | 也照本文从头到尾做,先看 §13 的四点(关键是:仿真用 cu128+ 的 torch) |
+> | **只有 Orin** | 照本文做,不需要任何替换 |
+> | **两台都有** | 谁上机看 `DEPLOY_TARGET_DECISION.md`:Orin 上机,5060 当开发/仿真/构建机 |
+>
+> 一条主线,全部命令可直接复制:**开箱 → clone 三个仓库 → 建环境 → 下模型 → 自检 →
 > 仿真(PICO 遥操)→ 参考推理 → 连真机(路线 B)**。
 > 这是把 `SIM_TELEOP.md`(仿真遥操)与 `GO_LIVE_CHECKLIST.md` / `A3_ONBOARD.md`(真机)
-> 在 **Orin** 上的合并版;细节原理仍以那三份为准。
+> 在**部署机**上的合并版;细节原理仍以那三份为准。
 >
-> 选型依据见 `DEPLOY_TARGET_DECISION.md`:**路线 B 的 policy 跑在 A3 的 RKNN 上,Orin 只做
+> 选型依据见 `DEPLOY_TARGET_DECISION.md`:**路线 B 的 policy 跑在 A3 的 RKNN 上,部署机只做
 > 参考生成与发布(纯 CPU 活,不需要 CUDA)**。
 
 ---
@@ -459,3 +470,69 @@ bash scripts/run_orin_live.sh --duration 1800 --endpoint tcp://0.0.0.0:5560
 相关文档:`DEPLOY_TARGET_DECISION.md`(为什么是 Orin)· `SIM_TELEOP.md`(仿真细节)·
 `A3_ONBOARD.md`(机载与适配节点)· `GO_LIVE_CHECKLIST.md`(单页清单)·
 `A3_OFFICIAL_INTERFACE.md`(官方接口对照)· `DEPLOY_ORIN.md`(部署原理与排查)
+
+---
+
+## 13. 换成 5060(x86 Linux)跑同一份手册 —— 只有 4 处不同
+
+**结论:能用,而且更省事。** 5060 是官方支持的「三方工控机部署」形态
+([aimdk §5](https://open.agibot.com/docs/aimdk/a3/v3_2/dev_guide/05-second_develop_program_deployment))。
+本文所有命令**一字不改**都能跑,下面四点注意一下即可。
+
+| # | 差异 | Orin(aarch64) | 5060(x86_64) |
+| --- | --- | --- | --- |
+| 1 | **仿真用的 torch** | Jetson 版 wheel,或干脆 CPU 版(仿真慢但能跑) | **必须 cu128 / cu129 / cu130** —— 5060 是 Blackwell(compute capability 12.0),老 `cu121` wheel **没有 sm_120 内核** |
+| 2 | PICO SDK 库路径 | `install_pico_minimal.sh` 自动用 `lib/aarch64` | 同一个脚本自动用 `lib/`(不需要改) |
+| 3 | 一键脚本的架构检查 | 打印 `arch: aarch64 (Jetson Orin)` | 打印 `arch: x86_64 -- fine for a 5060/4090 deployment machine`,**不是错误** |
+| 4 | 与机器人的连接 | 机载/Type-C/以太网 | 机器人头部 **Type-C** 或以太网;A3 侧 `--reference-endpoint` 写 5060 的 IP |
+
+其他一切相同:两个端口(5556 / 5560)、`scripts/env_orin.sh` 的路径推导、
+`check_orin_ready.sh` 的 16 项门禁、`run_live_chain.py --pico`、
+`run_orin_live.sh`、`run_mujoco_consumer.sh`、`download_from_hf.py`、
+AimSim —— 全部与架构无关。
+
+### 13.1 5060 上的推荐姿势(比 Orin 更舒服的地方)
+
+```text
+① 仿真和遥操都在 5060 上跑(MuJoCo + policy 用 5060 的 GPU,比 Orin 快)
+② rockchip 部署包的交叉编译也在 5060/4090 上做(需要 Docker + ROS2 + aarch64 ORT)
+③ 真机联调:5060 通过以太网/Type-C 发 A3_REFERENCE_V1,A3 侧连 5060 的 IP
+```
+
+### 13.2 5060 上从零开始(与 §12 速查的差异只有 torch 那一行)
+
+```bash
+# 0) 确认是 Blackwell(输出应含 12.0)
+nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
+
+cd ~/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+
+# 1) 建环境:UMR 用 CPU torch 就够(在线链路不需要 CUDA)
+bash scripts/orin_bootstrap.sh --with-umr
+
+# 2) 仿真环境:装 cu128+ 的 torch(Blackwell 必需)
+cd ~/a3_teleop_ws/sonic_for_a3
+python3 -m venv .venv_sim
+.venv_sim/bin/pip install --upgrade pip wheel
+.venv_sim/bin/pip install numpy scipy mujoco pyyaml msgpack pyzmq
+.venv_sim/bin/pip install torch --index-url https://download.pytorch.org/whl/cu130
+.venv_sim/bin/python -c "import torch;print(torch.__version__, torch.cuda.is_available())"
+.venv_sim/bin/python check_environment.py
+
+# 3) 官方 PICO 发送端环境(脚本自己识别 x86_64)
+bash install_scripts/install_pico_minimal.sh
+
+# 4) 其余照 §5(下模型 / SMPL-X / 示例数据 / 自检)→ §6(仿真)→ §9(上机)
+```
+
+> 如果 `torch.cuda.is_available()` 是 `False`,多半是驱动太旧或 wheel 不是 cu128+;
+> **这不影响 §9 的参考链路**(它本来就在 CPU 上跑),只影响 §6 的 MuJoCo policy 仿真。
+
+### 13.3 什么时候还是建议搬到 Orin
+
+```text
+· 现场不想拖线 / 需要机器人自走 / 需要机载供电
+· PICO 与参考生成放机器人侧可以减少一跳网络抖动
+· 官方推荐的「本体部署」形态
+除此之外,5060 一直用都行 —— 换机器不改协议、不改 A3 侧、不改任何代码。
+```
