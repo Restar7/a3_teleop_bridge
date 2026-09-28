@@ -774,7 +774,10 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 [ ] 头显里安装并打开 XRoboToolkit 应用,PC IP 填**本机**的 IP(脚本会打印,本机是 192.168.4.39)
 [ ] 确认全身追踪可用(app 里能看到 body data)
 [ ] 操作者:站直、双脚自然分开、双臂自然下垂,做一次标定姿势
-[ ] 手柄 **A 键** = 开始/暂停发送(脚本已带 --start-unpaused,起来就是 RUNNING;A 用于暂停)
+[ ] 手柄 **A 键** = 开始/暂停发送。**脚本已带 `--start-unpaused`,正常启动不需要按 A**
+      (只有你自己手动起发送端、或误按过 A 时才需要)
+      A 键现在**同时是「行走原点归零」按钮**:按两下(暂停→恢复)会把位移原点
+      重设为你现在站的位置。按下后会清空缓冲,参考短暂断开(协调层显示 HOLD)属正常
 ```
 
 **C. 卡住时怎么一眼看出是哪一侧**(发送端日志 `pico_sender.log`)
@@ -784,7 +787,9 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 | `robotics service script not found: /opt/apps/...` 然后一直 `waiting for body data...` | **PC Service 没起**(本机侧) | A。`ss -ltn \| grep 60061` 应该有人监听 |
 | `initialize sdk,connect127.0.0.1:60061` 后一直 `waiting for body data...` | PC Service 起了,但**头显没连上 / 没开身体追踪 / 中途掉线** | B。见下方"头显掉线" |
 | 出现 `Stream state: RUNNING` + `sent=` 递增 | **头显侧 OK** | 往下看 T2/T3 判据 |
-| `Stream state: PAUSED` | 忘了 unpause | 按手柄 **A**,或确认脚本带了 `--start-unpaused` |
+| `Stream state: PAUSED` | 忘了 unpause | 按手柄 **A**,或确认脚本带了 `--start-unpaused`(脚本默认已带,正常不用按) |
+| 想**重新对行走原点** | 走偏了 / 走了一圈想重来 | 按**两下** A(暂停→恢复),位移原点重设为你现在站的位置 |
+| 按 A 后参考断一下 | A 会清空发送端缓冲并重置帧跳变检测 | 预期行为,协调层短暂 `HOLD` 后自行恢复 |
 | **进了 MuJoCo 机器人立刻往后倒** | **不是关节对应问题**:发送端只发 root 相对的局部关节 + 朝向,**不发 root 世界平移**;修前 bridge 把它兜底成 `[0,0,0]`,于是参考的骨盆比机器人站的地方低 0.975 m,策略被命令"把骨盆放到地面"→ 塌下去 | **已修**(2026-09-28):缺 root 时重建为站立高度 `[0,0,0.975]`。症状特征:`fall=True` 在 ~0.8 s、`root_height≈0.25`、`roll/pitch≈180°`、状态机卡在 `CALIBRATION` |
 
 `run_pico_sim.sh` 会替你走完 A 的检查,并在发送端卡住 15 s 后**直接把上面这张表打出来**。
@@ -915,7 +920,8 @@ grep -E 'device' ~/.local/share/PICOBusinessSuitData/log/$(date +%Y%m%d).txt | t
 
 ```text
 PICO 发送端       日志出现 "Stream state: RUNNING" 且 sent 递增
-                  没出现 → 按手柄 A 键(发送端默认 PAUSED),或查 PC Service 是否在本机
+                  没出现 → 本脚本已带 --start-unpaused,正常不该出现;若出现先查 PC Service
+                  是否在本机,再考虑按 A 键(见 §17.1.1)
 T2 状态机         DISCONNECTED → CALIBRATION → TRACKING
 T2 rejected       0
 T2 solver p50     30–60 ms(5060 比 Orin 快;本机实测 36–48 ms)
