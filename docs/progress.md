@@ -728,3 +728,28 @@
   而 A3 MJCF 是 `elbow/wrist_roll/wrist_pitch/wrist_yaw`。官方转换器按**位置**拷贝,
   本实现同样按位置填;悬吊 2–4 级逐个关节确认映射即可,若错位只改生成器输入。
 - **下一阶段**: 硬件到位后按 `GO_LIVE_CHECKLIST.md` 执行
+
+## 阶段 M7(仿真侧)— PICO 遥操仿真的启动健壮性 + 步骤文档
+
+- **执行命令**:
+  ```bash
+  tools/run_live_chain.py --pico --csv ../logs/a3_validation/stand/stand.csv \
+      --policy-steps 400 --duration 90 --port 15674 --out-dir ../logs/sim_teleop/pico_smoke3
+  pytest tests integration -q
+  ```
+- **结果**: **PASS(无头显时的失败模式已验证)**
+  ```text
+  没数据时:策略照常 50 Hz 运行、机器人站着(149 步 / fall=false / roll-pitch 1.54°)
+  判定:NOT ACCEPTED,列出 3 条 problem(含 "is the PICO sender RUNNING ... A button")
+  超时:30 s 后按原逻辑报错退出;--reference-startup-wait-s 0 可关闭等待
+  ```
+- **改了什么**:
+  1. `sim2sim_a3_mujoco.py`:`--reference-source stream` 新增 `--reference-startup-wait-s`
+     (默认 30 s);等待期把 motion 第一帧平铺成 10 帧作"站立占位"(与官方 C++
+     `BuildDefaultStandTokenizerSlice` 同思路)。第一版只平铺 1 帧,触发
+     `reference provider returned joint_pos (1,29), expected (10,29)` —— 同轮修掉。
+  2. `reference_provider.py`:`StreamingReferenceProvider` 接受 `startup_window` /
+     `startup_wait_s`,等待期打一条明确日志。
+  3. `run_live_chain.py`:新增 `--pico` 模式(真头显 → online UMR → MuJoCo);失败时逐条打印 problem。
+- **新增文档**: `docs/SIM_TELEOP.md`(仿真遥操三层验证 + 三终端命令 + 判据 + 排查表)
+- **下一阶段**: 头显到位后按 `SIM_TELEOP.md` §2 跑 C 层;再按 `GO_LIVE_CHECKLIST.md` 上机

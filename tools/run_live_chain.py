@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""Live-architecture chain test (plan sections 44/49), hardware-free.
+"""Live-architecture chain (plan sections 44/49).
 
 Runs the *live* process split -- a bridge publisher driven by the online pipeline
 (4-stage: receiver -> solver -> predictor -> publisher) plus SONIC sim2sim
-consuming A3_REFERENCE_V1 over ZMQ -- with a recorded trajectory standing in for
-PICO+UMR.  This exercises exactly the code M7 will use; only the headset is
-missing.
+consuming A3_REFERENCE_V1 over ZMQ.  Three reference sources:
+
+    --pico                LIVE PICO headset (needs the XRoboToolkit PC service and
+                          a pose sender on port 5556): real teleoperation in MuJoCo
+    --recording <dir>     recorded PICO session replayed through online UMR
+    (neither)             recorded A3 trajectory replayed through the predictor
 
 Usage:
-    python tools/run_live_chain.py --csv <clip>.csv --policy-steps 3000 --duration 120
+    # PICO teleoperation in simulation -- see docs/SIM_TELEOP.md
+    python tools/run_live_chain.py --pico \\
+        --csv $A3WS/logs/a3_validation/stand/stand.csv --policy-steps 3000 --duration 150
+    # recorded session (no headset needed)
+    python tools/run_live_chain.py --recording $A3WS/recordings/m5_twist_torso_left \\
+        --csv $A3WS/logs/a3_validation/endurance_loop.csv --policy-steps 1500
 """
 
 from __future__ import annotations
@@ -29,7 +37,12 @@ from a3_teleop_bridge.contract import load_contract  # noqa: E402
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--csv", required=True)
+    parser.add_argument(
+        "--csv",
+        required=True,
+        help="motion CSV for the policy's own state input; with --pico/--recording "
+        "the *reference* comes from the stream instead",
+    )
     parser.add_argument("--csv-fps", type=float, default=30.0)
     parser.add_argument("--policy-steps", type=int, default=3000)
     parser.add_argument("--duration", type=float, default=120.0, help="pipeline seconds")
@@ -42,11 +55,18 @@ def main(argv: list[str] | None = None) -> int:
         "backend.  This is the hardware-free M7 chain: only the headset is missing.",
     )
     parser.add_argument(
+        "--pico",
+        action="store_true",
+        help="drive the bridge from a LIVE PICO stream (--source pico "
+        "--backend umr-online): the operator's motion becomes the reference. "
+        "Requires the XRoboToolkit PC service and the pose sender on port 5556.",
+    )
+    parser.add_argument(
         "--startup-wait",
         type=float,
         default=None,
         help="seconds to wait for retarget_live before starting the policy "
-        "(default 2.5, or 25 with --recording: the online UMR session needs a "
+        "(default 2.5, 25 with --recording/--pico: the online UMR session needs a "
         "~15 s one-off initialisation)",
     )
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "live_chain"))
@@ -62,9 +82,9 @@ def main(argv: list[str] | None = None) -> int:
         "-m",
         "a3_teleop_bridge.apps.retarget_live",
         "--source",
-        "recording" if args.recording else "trajectory",
+        "pico" if args.pico else ("recording" if args.recording else "trajectory"),
         "--backend",
-        "umr-online" if args.recording else "offline",
+        "umr-online" if (args.pico or args.recording) else "offline",
         "--csv",
         str(Path(args.csv).expanduser()),
         "--csv-fps",
@@ -81,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
     live_log = (out_dir / "retarget_live.log").open("w", encoding="utf-8")
     live = subprocess.Popen(live_cmd, cwd=str(BRIDGE_ROOT), stdout=live_log, stderr=subprocess.STDOUT)
     print(f"[live-chain] retarget_live started (pid {live.pid}) on {endpoint}")
-    wait = args.startup_wait if args.startup_wait is not None else (25.0 if args.recording else 2.5)
+    online_umr = bool(args.pico or args.recording)
+    wait = args.startup_wait if args.startup_wait is not None else (25.0 if online_umr else 2.5)
     time.sleep(wait)
 
     sim_cmd = [
@@ -146,6 +167,11 @@ def main(argv: list[str] | None = None) -> int:
         problems.append(f"pipeline rejected {stats['rejected']} frames")
     if not stats.get("frames_published"):
         problems.append("pipeline published nothing")
+    if args.pico and not stats.get("frames_published"):
+        problems.append(
+            "no reference was ever published: is the PICO sender RUNNING "
+            "(--start_unpaused or the controller's A button) on port 5556?"
+        )
 
     report = {
         "csv": str(Path(args.csv).expanduser()),
@@ -171,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"[live-chain] fall={metrics.get('fall')} root_z={(metrics.get('root_height') or {}).get('mean')}")
     print(f"[live-chain] states={stats.get('state_history')} published={stats.get('frames_published')}")
+    if problems:
+        print(f"[live-chain] NOT ACCEPTED -- {len(problems)} problem(s):")
+        for item in problems:
+            print(f"[live-chain]   - {item}")
     print(f"[live-chain] solver p50={((stats.get('solver_latency_ms') or {}).get('p50'))} ms, "
           f"e2e p95={((stats.get('end_to_end_ms') or {}).get('p95'))} ms")
     print(f"[live-chain] report: {out_dir / 'live_chain_report.json'}")
