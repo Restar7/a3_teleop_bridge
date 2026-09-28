@@ -257,3 +257,16 @@ def test_sender_publishes_root_translation():
     assert "_compute_root_translation" in text
     assert '"root_translation": np.stack(' in text
     assert "--no-root-translation" in text
+
+
+def test_pico_body_probe_separates_headset_from_pipeline():
+    """'the legs do not move' needs one probe to split into its two causes."""
+    path = BRIDGE_ROOT / "tools" / "probe_pico_body.py"
+    assert path.is_file()
+    proc = subprocess.run([sys.executable, str(path), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    source = path.read_text(encoding="utf-8")
+    for marker in ("NO_MOTION", "TRACKING", "NO_BODY_DATA"):
+        assert marker in source
+    # the XR layout matters: the leg joints are the last block before Root
+    assert "LeftUpLeg" in source and "RightToe" in source
