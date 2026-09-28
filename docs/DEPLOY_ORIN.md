@@ -100,8 +100,15 @@ bash scripts/orin_bootstrap.sh --with-umr       # 建 .venv_bridge 与 .venv_umr
 要点:
 
 - bridge 是纯 python(numpy/scipy/pyzmq/PyYAML/msgpack),aarch64 直接装;
-- UMR 需要 `torch`(按 **当前 JetPack** 选 wheel)、`trimesh`、`clarabel`、`smplx`;
-  若某个依赖只有 x86 wheel(例如某些 embree/pytorch3d 扩展),**记录到 `ORIN_BLOCKER.md`**
+- UMR 需要 `torch`、`trimesh`、`clarabel`、`smplx`。**实测:在线路径不需要 CUDA** ——
+  在开发机上把 `CUDA_VISIBLE_DEVICES=""` 后 online 会话照常工作
+  (SMPL-X 单帧前向本来就跑 CPU,见 `progress.md` 的性能条目),所以 Orin 上可以先用
+  PyPI 的 aarch64 CPU wheel(`torch … manylinux_2_28_aarch64.whl`,已验证存在),
+  **不必**先去折腾 JetPack 对应的 CUDA wheel —— 这消掉了最大的一个版本风险。
+  只有离线批量重定向才需要 CUDA。
+- 依赖可用性(已查 PyPI,cp310/aarch64 均有 wheel):numpy / scipy / pyzmq / PyYAML / msgpack;
+  pytest 是纯 python wheel。
+- 若某个依赖只有 x86 wheel(例如某些 embree/pytorch3d 扩展),**记录到 `ORIN_BLOCKER.md`**
   并走 §6 的 fallback,不要硬改 UMR 算法。
 
 **3.3 许可证资产(必须手工拷贝,包里没有)**

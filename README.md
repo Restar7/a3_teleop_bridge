@@ -191,6 +191,8 @@ bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz -
 脚本一览(全部 `--help` 可用):
 
 ```text
+tools/run_cpp_teleop_command_test.sh   A3 侧 C++:window->通道字段 + 发布泵(24 项)
+tools/run_cpp_channel_message_test.sh  真实 protobuf 消息往返(19 项,需 protoc)
 scripts/env_orin.sh              导出 A3WS/SONIC_A3_ROOT/UMR_ROOT/PY_*/端点
 scripts/package_bundle.sh        打包(排除 venv/权重/SMPL-X/生成文件)
 scripts/sync_to_orin.sh          rsync + 远端解包

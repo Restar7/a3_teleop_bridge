@@ -678,3 +678,53 @@
   本实现只使用由 contract 生成的置换表,并在单测里逐名字核对。
 - **剩余**:机器人侧约 20 行 AimRT publish 接线(需要 TA proto,本机无 AimRT 无法编译)
 - **下一阶段**: Orin/M9–M12 硬件到位后按 `GO_LIVE_CHECKLIST.md` 执行
+
+## 阶段 60/61(续)— AimRT 发布接线 + 真实 protobuf 校验(不等硬件)
+
+- **问题**:上一轮把"A3 侧接线"列为"要等 Orin"。其实只有**跑**在机器人上才需要硬件,
+  **写和验证**都可以现在做 —— 本轮补完,并用真实 `protoc` 抓出一个真错误。
+- **执行命令**:
+  ```bash
+  # 真实 protobuf 生成 + 编译(无需 AimRT/ROS/ORT)
+  apt-get install -y protobuf-compiler libprotobuf-dev
+  bash tools/run_cpp_channel_message_test.sh        # 19 项
+  bash tools/run_cpp_teleop_command_test.sh         # 24 项(回归)
+  bash tools/run_cpp_reference_test.sh              # 16 项(回归)
+  # 关掉 CUDA 验证在线 UMR
+  CUDA_VISIBLE_DEVICES="" UMR/.venv_umr/bin/python -c "<online session>"
+  # aarch64 依赖可用性(直接查 PyPI,不需要 Orin)
+  python3 - <<'PY'  (见本轮记录)
+  ```
+- **结果**: **PASS**
+  ```text
+  proto 级测试        19/19(真实 TaWholeBodyCommandChannel 序列化/反序列化 + 官方读法镜像)
+  command source      24/24
+  reference stream    16/16
+  bridge python       167 passed / 1 skipped
+  CUDA-free online    initialize OK;prepare 5.4–57.7 ms,solve 23.4–99.6 ms(无 CUDA)
+  aarch64 wheel       numpy/scipy/pyzmq/PyYAML/msgpack 均有 cp310 aarch64 轮子;
+                      torch 也有(PyPI 上 63 个 aarch64 轮子,含 cp310),但为 CPU 版
+  ```
+- **本轮抓到的真错误(值得记)**:
+  1. 消息类型是 **`TaWholeBodyCommandChannel`**(`header` + `data` 两层),
+     不是 `TaWholeBodyCommand`。手写 stub 编译发现不了,真实 `protoc` 一编就报
+     `has no member named 'mutable_header'`。已改为填 channel 消息。
+  2. 速度布局:官方 `ConvertTaWholeBodyCommand` 按**数组长度**分支 ——
+     30 槽是 leg12+waist3+**head1**+arm14(arm 起点 16),31 槽是 leg12+waist3+**head2**+arm14
+     (arm 起点 17,头部速度进 `head_dq`)。我们发 **31** 槽(与 proto 注释一致),
+     测试镜像两个分支都覆盖。
+- **不需要硬件的部分已全部完成**;剩下的只有"跑"和"测数字":
+  ```text
+  能在 4090 上做(已做)                       必须硬件
+  ─────────────────────────────────────      ──────────────────────────────
+  A3 侧 C++ 全链路 + 单测(24+19+16)          真实 PICO 头显(M7)
+  在线 UMR 无 CUDA 运行验证                   Orin 实测延迟/内存(M9)
+  aarch64 依赖可用性                          A3 MDU receive-only(M10)
+  package_bundle / sync / preflight 脚本      悬吊 10 级(M11)
+  x86 包构建?需要 ROS2 + ONNX Runtime(本机无,未装)  TensorRT/自由遥操(M12)
+  rockchip 交叉编译?需要 Docker(本机无)
+  ```
+- **上机待确认(不要猜)**:proto 注释里手臂命名是 `elbow_pitch/elbow_yaw/wrist_pitch/wrist_yaw`,
+  而 A3 MJCF 是 `elbow/wrist_roll/wrist_pitch/wrist_yaw`。官方转换器按**位置**拷贝,
+  本实现同样按位置填;悬吊 2–4 级逐个关节确认映射即可,若错位只改生成器输入。
+- **下一阶段**: 硬件到位后按 `GO_LIVE_CHECKLIST.md` 执行

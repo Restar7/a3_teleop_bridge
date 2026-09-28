@@ -47,14 +47,29 @@ A3_REFERENCE_V1 (ZMQ, 10×29@il order) ──► 取第 0 帧 + 置换到 policy
                                                                               /ta/whole_body_command
 ```
 
-**现状(已实现,只剩最后的 publish 调用)**:
+**现状(整条链都已实现,只剩一处 AimRT 接线)**:
 
 ```text
 include/a3_deploy/a3_reference_stream.hpp/.cpp        收包/解码/校验(16 项单测)
 include/a3_deploy/a3_teleop_joint_order.hpp           生成的 il<->policy 置换表(勿手改)
 include/a3_deploy/a3_teleop_command_source.hpp/.cpp   window -> 通道字段 + 发布泵(24 项单测)
-unit_tests/test_a3_teleop_command_source.cpp          独立测试,不需要 AimRT/ZMQ
+include/a3_deploy/a3_teleop_channel_message.hpp/.cpp  字段 -> 真实 protobuf 消息(19 项单测)
+include/a3_deploy/a3_teleop_channel_publisher.hpp/.cpp AimRT 发布(关闭 TA proto 时退化为 stub)
+unit_tests/test_a3_teleop_{command_source,channel_message}.cpp   都不需要 AimRT
 ```
+
+⚠️ **消息类型是 `TaWholeBodyCommandChannel`(不是 `TaWholeBodyCommand`)**:
+
+```proto
+message TaWholeBodyCommandChannel {
+  Header header = 1;            // seq + timestamp
+  TaWholeBodyCommand data = 2;  // 关节分组
+}
+```
+
+用真实 `protoc` 编译时才暴露出来(`TaWholeBodyCommand` 本身**没有** header 字段)。
+`a3_teleop_channel_message.cpp` 现在填的是 channel 消息,`header.seq`/`header.timestamp`
+按官方 `ConvertTaWholeBodyCommand` 的读法写(秒 + 纳秒)。
 
 `A3TeleopCommandPump::PushWindow()` 产出的 `A3WholeBodyCommandFields` 已经就是
 `/ta/whole_body_command` 的字段分组(腰 3 / 左臂 7 / 右臂 7 / 左腿 6 / 右腿 6 /
@@ -98,9 +113,18 @@ head                      协议里没有头部数据,has_head_command=false,run
 
 ```bash
 cd ~/a3_teleop_ws/a3_teleop_bridge
-bash tools/run_cpp_teleop_command_test.sh      # 24 项检查,纯 C++17
-bash tools/run_cpp_reference_test.sh           # 解码侧 16 项检查
+bash tools/run_cpp_teleop_command_test.sh      # 24 项,纯 C++17,无需任何依赖
+bash tools/run_cpp_reference_test.sh           # 解码侧 16 项(需要 libzmq + msgpack)
+bash tools/run_cpp_channel_message_test.sh     # 19 项,真实 protobuf(需要 protoc + libprotobuf)
 ```
+
+**上机必须确认的一点(不要猜)**:`ta_whole_body_command.proto` 里对手臂 14 个关节的注释
+用的是 `left_elbow_pitch / left_elbow_yaw / left_wrist_pitch / left_wrist_yaw`,而 A3 MJCF 的
+policy 顺序是 `left_elbow / left_wrist_roll / left_wrist_pitch / left_wrist_yaw` ——
+**命名不是逐字对应**。官方 `ConvertTaWholeBodyCommand` 是按**位置**拷贝 `arm[0..13]`,
+A3 runtime 就是这么读的,所以本实现也按位置填。上机时用悬吊 2–4 级
+(shoulder / elbow / wrist)逐个关节小幅移动确认映射;若发现错位,只需要改
+`tools/make_cpp_joint_order.py` 的生成输入,不要在 C++ 里手改数组。
 
 **注意**:官方 `policy_parameters.hpp` 里那套 `isaaclab_to_mujoco` /
 `mujoco_to_isaaclab` 是 **G1 约定**的顺序,**不是**本通道的顺序。本通道(policy view)
