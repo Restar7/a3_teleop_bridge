@@ -183,6 +183,7 @@ bash scripts/sync_to_orin.sh --bundle $A3WS/dist/a3_teleop_orin_<stamp>.tar.gz -
 | --- | --- |
 | [`docs/DEPLOY_ORIN.md`](docs/DEPLOY_ORIN.md) | Orin 全流程:预检 → 环境重建 → SMPL-X 手工拷贝 → 就绪门禁(16 项)→ 网络 → PICO+UMR live → MuJoCo 消费端验证 → 长跑/故障注入 → fallback |
 | [`docs/A3_ONBOARD.md`](docs/A3_ONBOARD.md) | 机载:含**已实现的参考→通道桥**(`a3_teleop_command_source.*`,24 项 C++ 单测)与唯一的 AimRT 接线点 |
+| [`docs/DEPLOY_TARGET_DECISION.md`](docs/DEPLOY_TARGET_DECISION.md) | **路线 B 的部署机选型:Orin(机载)**;理由、决策矩阵、Orin 速率判据与一行配置兜底 |
 | [`docs/MACHINE_ROLES.md`](docs/MACHINE_ROLES.md) | **哪台机器跑什么**(4090/5060/Orin/HDU/MDU);5060 当部署机的可行性、Blackwell torch 约束与从零命令 |
 | [`docs/A3_OFFICIAL_INTERFACE.md`](docs/A3_OFFICIAL_INTERFACE.md) | 官方 aimdk v3.2 接口对照(状态机 / ROS2 话题 / 关节名与限位 / motion_player / AimSim 仿真)+ 路线 A/B 选型 |
 | [`docs/SIM_TELEOP.md`](docs/SIM_TELEOP.md) | **在仿真里用 PICO 遥操**:三层验证(离线回放 → 录制驱动 → 真头显)、三个终端命令、判据、无数据时的行为与排查 |

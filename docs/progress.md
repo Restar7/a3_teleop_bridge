@@ -753,3 +753,21 @@
   3. `run_live_chain.py`:新增 `--pico` 模式(真头显 → online UMR → MuJoCo);失败时逐条打印 problem。
 - **新增文档**: `docs/SIM_TELEOP.md`(仿真遥操三层验证 + 三终端命令 + 判据 + 排查表)
 - **下一阶段**: 头显到位后按 `SIM_TELEOP.md` §2 跑 C 层;再按 `GO_LIVE_CHECKLIST.md` 上机
+
+## 阶段 选型 — 路线 B:部署机定为 Orin
+
+- **背景**:读官方 aimdk v3.2 文档后发现 A3 自带运控,存在「用官方运控做上肢遥操」的路线 A;
+  本项目确认走**路线 B**(SONIC A3-fast 全身 policy 接管 29 关节)
+- **决策**:机载部署机 = **Orin**;5060/4090 = 开发机(仿真、AimSim、交叉编译部署包)+ UMR 兜底
+- **依据**:
+  ```text
+  路线 B 的 policy 跑在 A3 MDU(RKNN)上,部署机是纯 CPU 活
+    实测:SMPL-X 单帧 7.3 ms(CPU)、online UMR 48 ms(关掉 CUDA 照跑)、predictor+发布 <1 ms
+  遥操要的是可靠性:机载供电 + 机内直连 > PC + 线缆/Wi-Fi
+  开发与部署分离:仿真/构建在 4090,Orin 只放验证过的运行时
+  ```
+- **风险与兜底**:Orin CPU 比 4090 弱,UMR 可能 <20 Hz。判据:Orin 上跑 20 s 录制回放看
+  `solver_latency_ms.p50`;>100 ms 时把 UMR 留在 4090/5060,只把参考流过以太网发给 A3
+  —— **切换代价是 `configs/network.yaml` 的一行 `bind_host`**(协议与 A3 侧不变,方案 §51)
+- **文档**:新增 `docs/DEPLOY_TARGET_DECISION.md`;`MACHINE_ROLES.md`、`A3_OFFICIAL_INTERFACE.md` 已同步
+

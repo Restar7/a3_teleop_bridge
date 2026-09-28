@@ -1,5 +1,10 @@
 # MACHINE_ROLES.md — 哪台机器跑什么(4090 / 5060 / Orin / HDU / MDU)
 
+> **决策更新(路线 B,见 `DEPLOY_TARGET_DECISION.md`)**:**机载部署机选 Orin**;
+> 5060 / 4090 作为开发机(仿真、AimSim、交叉编译部署包)与 UMR 兜底。
+> 路线 B 的 policy 跑在 A3 的 RKNN 上,部署机是纯 CPU 活,**不需要 GPU** ——
+> 所以 5060 的 GPU 在部署角色上用不上,而它作为开发机非常合适。
+
 > 结论先给:**RTX 5060 的机器完全可以当部署机** —— 官方支持「三方工控机部署」
 > ([aimdk §5](https://open.agibot.com/docs/aimdk/a3/v3_2/dev_guide/05-second_develop_program_deployment)),
 > 我们的在线链路又几乎不吃 GPU。但有几条硬约束要先确认(见 §3)。
