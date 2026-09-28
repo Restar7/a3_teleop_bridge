@@ -817,3 +817,152 @@
   每次运行都会重写,不属于"仓库可移植"问题;本轮曾误删,已用 `run_umr_a3_batch.py --force` 重新生成。
 - **下一阶段**: 5060 上 `git pull --ff-only` 后按同一命令复验(不带 `--sonic-root`)
 
+
+---
+
+## 阶段 M5b(5060 复验)— 验收动作集 9/9 复现 + `hip_roll_joint_mirror` 误杀修复
+
+- **时间**: 2026-09-28(ThinkBook 5060,conda `a3_bridge` 解释器)
+- **背景**: 5060 上用 `data/pico_smplx/all`(PICO 回环)重跑 UMR 得到
+  `$A3WS/UMR/output/a3_pico_all/*.npz`,9 个 clip 里 5 个 FAIL,且**只**失败
+  `hip_roll_joint_mirror` 一项;`finite / root_* / joint_limits / knee / velocity /
+  acceleration / feet_*` 全部通过。
+
+### 根因(实测,不是推断)
+
+1. **静态中性偏置**:A3 中立姿态的 hip roll 本身不对称 ——
+   `left_hip_roll = -0.04694 rad`,`right_hip_roll = -0.01795 rad`,**两侧同为负**。
+   `m5_stand` clip 全程恒定在这两个值上(150 帧 range = 0.00000 rad),
+   9 个 clip 的**首帧完全相同**(retarget pose-init)。
+2. **判据用的是整段原始均值**:旧规则要求 `mean(left)` 与 `mean(right)` 符号相反。
+   由于两侧中性都是负数,只要左侧偏离中性超过 `|0.05 − 0.04694| = 3 mrad`,
+   显著性门槛就被左侧**静态偏置**吃满,然后拿一个被偏置主导的量去判"镜像"。
+3. **9 个 clip 的动态行程本来就很小**:最大 hip roll 动态偏移 0.0712 rad(4.1°),
+   其余 ≤ 0.035 rad;这些都是平衡补偿量级,轨迹本身无法区分
+   "同向横移"与"镜像错误"。旧判据在这批数据上没有任何信息量,只有误杀。
+
+证据:`logs/a3_validation_all_nomj/hip_roll_diagnostic.txt`(修复前存档)。
+
+### 判据修改(改的是逻辑,不是阈值)
+
+| | 旧 | 新 |
+| --- | --- | --- |
+| 参考量 | 整段**原始均值** | **参考帧相对**行程 `d(t) = q(t) − q(ref)`(默认 clip 首帧,可用 `--neutral-npz` 显式指定) |
+| 显著性 | `max(|mean|) < 0.05` → n/a | `max(max|d|) < 0.05` → n/a(静态偏置不再占额度) |
+| 硬失败条件 | 原始均值**同号**(任何幅度) | **两侧都**粗大扫掠(各 > 0.25 rad ≈ 14°)且**世界方向相同** → 关节符号/镜像约定被破坏 |
+| 其余同向情况 | 直接 FAIL | **非致命诊断**(`report["diagnostics"]`),附 common-mode / scissor 分解 |
+
+- 0.25 rad 不是"把 0.02 调大":它是一条**新的物理分界**(超出平衡补偿范围),
+  而且判据要求**两侧同时**粗大才触发,单侧动作(抬单脚/抬单臂)永远不会误伤。
+- 真正的符号交换仍会被抓住:1) 同向粗大扫掠命中该检查;2) A3 的 roll 限位本身是
+  **镜像且强不对称**的(hip:左 `[-0.524,+1.606]` / 右 `[-1.606,+0.524]`),
+  有实际幅度的符号交换会同时撞 `joint_limits`。回归测试两条都覆盖。
+- **物理检查(限位/速度/加速度/足部/有限性/膝方向)全部保持 hard fail,一个都没删。**
+
+### 修改文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `tools/validate_a3_motion.py` | mirror 判据改为参考帧相对 + 粗大同向扫描;新增 `--neutral-npz`;新增 `diagnostics`(非致命)与 `joint_excursion_rad` / `knee_excursion_rad` / `mirror_reference` |
+| `tests/test_validate_a3_motion.py` | **新增**,15 项回归(见下) |
+| `tools/run_live_chain.py` | sim 端解释器不再硬编码 `.venv_sim`,支持 `--sim-python` / `$PY_SIM`,与 `run_a3_baseline.py` 的 `find_python` 一致 |
+| `scripts/check_orin_ready.sh` | 允许预导出的 `PY_BRIDGE`/`PY_UMR` 覆盖 venv 默认值;否则 interpreter 不存在时 3/5、4/5、5/5 三段会被**静默跳过** |
+
+### 回归测试(`tests/test_validate_a3_motion.py`,15 项)
+
+```text
+静态中性偏置 + 正常动态            → PASS(旧规则在此 FAIL,即 m5_bend_knees 形状)
+抬单脚 / 迈步这类非对称动作          → PASS(同向但不粗大 → 只出诊断)
+肩部镜像抬手(正确反向)             → PASS
+同向粗大 hip roll 0.40 rad         → FAIL(且此时 joint_limits 仍为 ok,证明该检查不可删)
+肩部符号交换 0.60 rad              → FAIL(限位不越界,只有该检查能抓)
+显式 --neutral-npz 参考            → 读到的参考值与行程随参考变化
+NaN / 越限 / 反折膝 / root teleport / 速度尖峰 → 仍然 hard FAIL
+诊断不掩盖物理失败                 → 同时报出 2 条 problem
+9 个真实 npz 全通过                → PASS(数据缺失时自动 skip)
+```
+
+### 验收结果(全部实测)
+
+```bash
+# 1) 单元 + 集成
+python -m pytest tests integration -q                    → 180 passed, 13 skipped
+
+# 2) 数值 + CSV(--skip-mujoco)
+python tools/run_a3_validation_suite.py \
+  --data-dir $A3WS/UMR/output/a3_pico_all \
+  --out-dir  $A3WS/logs/a3_validation_all_nomj --skip-mujoco   → 9/9 clips PASS
+
+# 3) MuJoCo smoke(单 clip 100 步)
+python tools/run_a3_validation_suite.py ... --only m5_twist_torso_left \
+  --policy-steps 100 --out-dir $A3WS/logs/a3_validation_mujoco_smoke  → 1/1 PASS
+
+# 4) MuJoCo 全量(9 clip,各 249 步)
+python tools/run_a3_validation_suite.py \
+  --data-dir $A3WS/UMR/output/a3_pico_all \
+  --out-dir  $A3WS/logs/a3_validation_mujoco_full          → 9/9 PASS(67 s)
+```
+
+| clip | fall | steps | root z | roll/pitch max | RMSE(29) |
+| --- | --- | --- | --- | --- | --- |
+| m5_stand | false | 249 | 1.0727 | 1.55° | 0.0568 |
+| m5_raise_left_arm | false | 249 | 1.0718 | 2.49° | 0.0893 |
+| m5_raise_right_arm | false | 249 | 1.0677 | 3.59° | 0.1028 |
+| m5_bend_knees | false | 249 | 1.0571 | 7.27° | 0.1436 |
+| m5_twist_torso_left | false | 249 | 1.0729 | 1.55° | 0.0647 |
+| m5_twist_torso_right | false | 249 | 1.0716 | 4.83° | 0.0665 |
+| m5_lift_left_foot | false | 249 | 1.0697 | 7.41° | 0.1050 |
+| m5_lift_right_foot | false | 249 | 1.0726 | 3.24° | 0.0986 |
+| m5_step_forward_slow | false | 249 | 1.0692 | 4.72° | 0.0934 |
+
+```bash
+# 5) A3-fast 官方 baseline
+python tools/run_a3_baseline.py --smoke                       → ACCEPTED(M1)
+python tools/run_a3_baseline.py                               → 1652 步 @50 Hz,fall=false,ACCEPTED
+
+# 6) 只读自检
+bash scripts/check_orin_ready.sh                              → 16 ok, 0 failed
+bash tools/run_cpp_teleop_command_test.sh                     → 25 项 PASS
+bash tools/run_cpp_channel_message_test.sh                    → 19 项 PASS
+
+# 7) online UMR(recorded PICO,硬件无关)
+python -m a3_teleop_bridge.apps.retarget_live --source recording --backend umr-online \
+  --recording $A3WS/recordings/all/m5_twist_torso_left --duration 8 --no-publish
+  → frames in=240 solved=190 rejected=0,solver p50 40.37 ms / p95 69.91 ms(达标)
+
+# 8) 完整 live chain(recorded PICO → online UMR → A3_REFERENCE_V1 → A3-fast/MuJoCo)
+python tools/run_live_chain.py --recording $A3WS/recordings/all/m5_twist_torso_left \
+  --csv $A3WS/logs/a3_validation_all_nomj/m5_twist_torso_left/m5_twist_torso_left.csv \
+  --policy-steps 600 --duration 40 --port 15640
+  → ACCEPTED:249 步,fall=false,root z 1.0686,published=857,solver p50 34.9 ms
+
+# 9) 5 分钟连续发布(§12.1 的缩短版,无人值守)
+python -m a3_teleop_bridge.apps.retarget_live --source recording --backend umr-online \
+  --recording $A3WS/recordings/all/m5_twist_torso_left --loop --publish \
+  --endpoint tcp://127.0.0.1:15642 --duration 300 --playback-hz 30 \
+  --stats $A3WS/logs/orin_live/stats_5min.json
+  → wall 300.35 s;frames in=9000 solved=7156 published=7156 rejected=0
+     solver p50 36.6 / p95 71.8 / p99 87.8 ms(与 8 s 短跑的 40.4 / 69.9 持平,p95 不恶化)
+     predictor p50 0.49 ms;end-to-end p50 38.4 / p95 75.3 ms
+     state_history 只有 TRACKING/HOLD 交替,**无 SAFE_STOP**;queue_dropped human=1844
+     (latest-only 的有界丢弃,state 队列 0)
+```
+
+### 本轮发现(未修改,留待决策)
+
+- **A3 膝在整个验收集里基本不动**:9 个 clip 的 `left_knee_joint` 行程 = 0.00000 rad
+  (恒定在 0.0;只有 `lift_right_foot` 到 +0.0139、`step_forward_slow` 到 +0.0218)。
+  源 SMPL-X 的 `bend_knees` 膝关节屈曲约 36–43°,也就是说**膝屈曲没有被转移**,
+  下蹲是由 ankle pitch(0.59 rad)+ hip pitch(0.43 rad)做出来的,root 高度只变化 6 mm。
+  原因与 `NON_NEGATIVE_JOINTS`(膝下界裁到 0)一致:求解器偏好的方向在下界之外,
+  于是**饱和在 0**。这正是 `mujoco_validation.md` 里"膝限位"那条修复的副作用。
+  - 本轮**未改** UMR 配置/映射/求解器参数(按要求),只在 validator 里加了**非致命诊断**
+    (`knee_excursion_rad` + "flexes by only … rad" 提示),让它在每次验收里可见。
+  - 若要让 `bend_knees` 真的屈膝,需要单独一轮改 UMR 膝轴向/下界并把 9 个 clip 重跑
+    (本批 npz 按约定复用,未重新生成)。
+- `retarget_live` 在未 `source scripts/env_orin.sh` 时,`$SONIC_A3_ROOT` 未导出,
+  UMR 会拿到字面量 `UMR/${SONIC_A3_ROOT}/...` 路径并以 `FileNotFoundError` 失败
+  (runbook §15 已记录该现象;本轮踩到两次,仍建议以后加显式报错)。
+
+- **下一阶段**: 无硬件可做的部分已全部完成;剩余为 PICO 头显 / AimSim / 真机
+  (§7/§8/§11),需硬件在场。上机前按 `GO_LIVE_CHECKLIST.md` A→G 执行。

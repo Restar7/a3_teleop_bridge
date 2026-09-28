@@ -35,6 +35,25 @@ sys.path.insert(0, str(BRIDGE_ROOT / "src"))
 from a3_teleop_bridge.contract import load_contract  # noqa: E402
 
 
+def find_sim_python(sonic_root: Path, explicit: str | None) -> Path:
+    """Interpreter that has mujoco+torch for the SONIC sim2sim consumer.
+
+    Same resolution order as ``tools/run_a3_baseline.py`` so a machine that runs
+    the sim out of a conda env (no ``.venv_sim``) works without a special case.
+    """
+    if explicit:
+        return Path(explicit).expanduser()
+    import os
+
+    env_python = os.environ.get("PY_SIM")
+    if env_python and Path(env_python).expanduser().is_file():
+        return Path(env_python).expanduser()
+    candidate = sonic_root / ".venv_sim" / "bin" / "python"
+    if candidate.is_file():
+        return candidate
+    return Path(sys.executable)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -70,12 +89,22 @@ def main(argv: list[str] | None = None) -> int:
         "~15 s one-off initialisation)",
     )
     parser.add_argument("--out-dir", default=str(BRIDGE_ROOT.parent / "logs" / "live_chain"))
+    parser.add_argument(
+        "--sim-python",
+        default=None,
+        help="interpreter with mujoco+torch for the SONIC sim2sim consumer "
+        "(default: $PY_SIM, else $SONIC_A3_ROOT/.venv_sim/bin/python, else this "
+        "interpreter -- so a conda env works the same way it does for "
+        "tools/run_a3_baseline.py)",
+    )
     args = parser.parse_args(argv)
 
     contract = load_contract()
     out_dir = Path(args.out_dir).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     endpoint = f"tcp://127.0.0.1:{args.port}"
+    sim_python = find_sim_python(contract.sonic_root, args.sim_python)
+    print(f"[live-chain] sim interpreter: {sim_python}")
 
     live_cmd = [
         sys.executable,
@@ -106,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     time.sleep(wait)
 
     sim_cmd = [
-        str(contract.sonic_root / ".venv_sim" / "bin" / "python"),
+        str(sim_python),
         "gear_sonic/scripts/sim2sim_a3_mujoco.py",
         "--checkpoint",
         str(contract.sonic_root / "checkpoints" / "035_step200000" / "model_step_200000.pt"),

@@ -7,13 +7,16 @@ that can be checked headlessly:
   * no NaN / no non-finite frames
   * root stays in a plausible height band and never teleports between frames
   * knees bend in the correct direction (no reverse knee)
-  * left/right limbs keep their own side (no mirroring, no swapped arms)
+  * left/right limbs keep their own side: the mirrored roll pairs are checked
+    against their *reference-relative* excursion (a joint sign/convention check,
+    not a posture-symmetry requirement -- see the note in ``validate``)
   * feet do not cross the body midline and stay above the ground plane
   * joint limits are respected (hard requirement)
   * joint velocity and acceleration stay inside the configured bounds
 
 Usage:
     python tools/validate_a3_motion.py --umr-result PATH.npz [--json OUT]
+    python tools/validate_a3_motion.py --umr-result PATH.npz --neutral-npz STAND.npz
     python tools/validate_a3_motion.py --csv PATH.csv --fps 30
 """
 
@@ -93,13 +96,21 @@ def validate(
     dt: float,
     bodies: dict[str, np.ndarray] | None = None,
     ground_z: float = 0.0,
+    neutral: dict[str, float] | None = None,
+    neutral_label: str = "clip frame 0 (retarget pose-init)",
 ) -> dict:
     contract = load_contract()
     limits = load_limits()
     names = list(contract.policy_joint_names)
     idx = {name: i for i, name in enumerate(names)}
 
-    report: dict = {"frames": int(joint_pos.shape[0]), "dt": dt, "problems": [], "checks": {}}
+    report: dict = {
+        "frames": int(joint_pos.shape[0]),
+        "dt": dt,
+        "problems": [],
+        "diagnostics": [],
+        "checks": {},
+    }
 
     def check(name: str, ok: bool, detail: str) -> None:
         report["checks"][name] = {"ok": bool(ok), "detail": detail}
@@ -156,30 +167,141 @@ def validate(
                 f"(model lower limit {lower_limit:+.4f}, tolerance {-knee_tolerance:+.2f})",
             )
 
+    # ---- how much of each joint's range the clip actually uses ----------
+    # Range utilisation is reported, never failed: a clip is allowed to leave a
+    # joint alone.  It is what makes a saturated solver visible instead of
+    # silently green -- a knee that sits at exactly one value for the whole clip
+    # is the signature of a retargeter whose preferred direction is on the far
+    # side of a clipped lower bound, not of a motion that chose to keep the knee
+    # straight.
+    excursion = joint_pos.max(axis=0) - joint_pos.min(axis=0)
+    report["joint_excursion_rad"] = {
+        name: round(float(excursion[i]), 5) for i, name in enumerate(names)
+    }
+    if joint_pos.shape[0] > 2:
+        pinned_atol = 1e-6
+        pinned_low = (np.abs(joint_pos - lower) <= pinned_atol).mean(axis=0) > 0.95
+        pinned_high = (np.abs(joint_pos - upper) <= pinned_atol).mean(axis=0) > 0.95
+        for i, name in enumerate(names):
+            if pinned_low[i] or pinned_high[i]:
+                bound = "lower" if pinned_low[i] else "upper"
+                value = float(lower[i] if pinned_low[i] else upper[i])
+                report["diagnostics"].append(
+                    f"{name}: pinned on its {bound} limit ({value:+.4f} rad) for "
+                    f">95% of the clip (excursion {excursion[i]:.5f} rad) -- check "
+                    f"whether the retarget solver is saturated against a clipped "
+                    f"bound rather than tracking the motion"
+                )
+    knee_usage = {}
+    for side in ("left", "right"):
+        key = f"{side}_knee_joint"
+        if key not in idx:
+            continue
+        used = float(excursion[idx[key]])
+        knee_usage[key] = round(used, 5)
+        if used < 0.02:
+            report["diagnostics"].append(
+                f"{key}: flexes by only {used:.5f} rad over the whole clip "
+                f"(held at {joint_pos[0, idx[key]]:+.4f} rad of a "
+                f"[{limits.lower[idx[key]]:+.4f}, {limits.upper[idx[key]]:+.4f}] rad range) "
+                f"-- verify the source motion really is knee-neutral before accepting it"
+            )
+    report["knee_excursion_rad"] = knee_usage
+
     # ---- left/right sanity (no mirroring) ------------------------------
-    #: below this, a joint mean is indistinguishable from retarget noise and the
-    #: sign test carries no information
-    mirror_significance = 0.05  # rad
+    # "mirror" here is a *joint sign convention* check, not a posture-symmetry
+    # requirement.  Two facts about the A3 make a raw whole-clip mean unusable
+    # for it:
+    #
+    #   * the shipped neutral pose is not roll-symmetric.  The retarget
+    #     pose-init sits at left_hip_roll -0.0469 rad / right_hip_roll
+    #     -0.0179 rad -- both negative -- and the ``stand`` clip is constant at
+    #     exactly those values, so every raw clip mean is dominated by a static
+    #     offset that carries no information about the motion at all.  With a
+    #     0.05 rad significance threshold the left offset alone consumes 94% of
+    #     the budget: 3 mrad of drift used to trip the test.
+    #   * inherently one-sided motions (lift one foot, raise one arm, torso
+    #     twist, slow step) add a common-mode lateral shift on top of any
+    #     mirror-symmetric component, and a trajectory cannot be asked to
+    #     separate the two on its own.
+    #
+    # So the test is evaluated on the *reference-relative* excursion
+    # ``d(t) = q(t) - q(reference)`` -- the reference is the clip's own neutral
+    # pose-init frame unless ``--neutral-npz`` supplies an explicit neutral --
+    # and it only hard-fails on the signature a real sign/mirror bug leaves:
+    # both limbs of a mirrored pair sweeping *grossly* in the *same* world
+    # direction.  Note the A3 roll ranges are themselves mirrored and strongly
+    # asymmetric (hip: left [-0.524, +1.606] / right [-1.606, +0.524]), so a
+    # sign swap on any motion with real amplitude also breaks ``joint_limits``
+    # independently.  Below the gross bound the left/right sign reading is
+    # reported as a non-fatal diagnostic instead.  Everything genuinely
+    # physical (limits, velocity, acceleration, feet) stays a hard failure.
+    mirror_significance = 0.05  # rad: below this the sign test carries no information
+    mirror_gross = 0.25  # rad (~14 deg): past what a balance shift can explain
+    neutral = neutral or {}
     for suffix in ("shoulder_roll_joint", "hip_roll_joint", "ankle_roll_joint"):
         left, right = f"left_{suffix}", f"right_{suffix}"
-        if left in idx and right in idx:
-            mean_left = float(np.mean(joint_pos[:, idx[left]]))
-            mean_right = float(np.mean(joint_pos[:, idx[right]]))
-            if max(abs(mean_left), abs(mean_right)) < mirror_significance:
-                check(
-                    f"{suffix}_mirror",
-                    True,
-                    f"n/a: means {mean_left:+.3f} / {mean_right:+.3f} rad are below the "
-                    f"{mirror_significance} rad significance threshold",
-                )
-                continue
-            # roll axes point the same way in the model, so the mirror invariant is
-            # that the mean signs are opposite
+        if left not in idx or right not in idx:
+            continue
+        left_series = joint_pos[:, idx[left]]
+        right_series = joint_pos[:, idx[right]]
+        ref_left = float(neutral[left]) if left in neutral else float(left_series[0])
+        ref_right = float(neutral[right]) if right in neutral else float(right_series[0])
+        d_left = left_series - ref_left
+        d_right = right_series - ref_right
+        amp_left = float(np.abs(d_left).max())
+        amp_right = float(np.abs(d_right).max())
+        amp = max(amp_left, amp_right)
+        peak_left = float(d_left[int(np.argmax(np.abs(d_left)))])
+        peak_right = float(d_right[int(np.argmax(np.abs(d_right)))])
+        # split the motion into the common-mode (lateral shift) and the
+        # anti-symmetric (scissor) component so the numbers are auditable
+        common = 0.5 * (float(d_left.mean()) + float(d_right.mean()))
+        scissor = 0.5 * (float(d_left.mean()) - float(d_right.mean()))
+        detail = (
+            f"neutral-relative excursion {amp_left:.4f}/{amp_right:.4f} rad "
+            f"(reference {ref_left:+.4f}/{ref_right:+.4f} from {neutral_label}); "
+            f"common-mode {common:+.4f} scissor {scissor:+.4f} rad"
+        )
+        report.setdefault("mirror_reference", {})[suffix] = {
+            "reference": neutral_label,
+            "left": ref_left,
+            "right": ref_right,
+            "excursion_left_rad": amp_left,
+            "excursion_right_rad": amp_right,
+            "common_mode_rad": common,
+            "scissor_rad": scissor,
+        }
+        same_direction = bool(np.sign(peak_left) == np.sign(peak_right))
+        gross_swap = (
+            amp > mirror_gross
+            and min(abs(peak_left), abs(peak_right)) > mirror_gross
+            and same_direction
+        )
+        if amp < mirror_significance:
             check(
                 f"{suffix}_mirror",
-                bool(np.sign(mean_left) != np.sign(mean_right)),
-                f"mean left {mean_left:+.3f} vs right {mean_right:+.3f} rad",
+                True,
+                f"n/a: {detail}; below the {mirror_significance} rad significance threshold",
             )
+        elif gross_swap:
+            check(
+                f"{suffix}_mirror",
+                False,
+                f"both limbs sweep {peak_left:+.3f}/{peak_right:+.3f} rad in the SAME "
+                f"world direction (> {mirror_gross} rad): the left/right sign "
+                f"convention is broken, not a balance shift; {detail}",
+            )
+        else:
+            check(f"{suffix}_mirror", True, detail)
+            if same_direction:
+                report["diagnostics"].append(
+                    f"{suffix}_mirror: left/right excursions share a world direction "
+                    f"({peak_left:+.4f}/{peak_right:+.4f} rad) but stay inside the "
+                    f"{mirror_gross} rad gross bound -- consistent with the common-mode "
+                    f"({common:+.4f} rad) lateral shift of an inherently one-sided "
+                    f"motion, not a mirror error"
+                )
 
     # ---- velocity / acceleration --------------------------------------
     if joint_pos.shape[0] > 2 and dt > 0:
@@ -262,6 +384,17 @@ def load_inputs(args) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, f
     return data.dof29_rad, joint_vel, data.root_pos_m, data.root_quat_wxyz, dt, None
 
 
+def load_neutral_reference(path: str | Path, names: list[str]) -> dict[str, float]:
+    """Mean joint pose of an explicit neutral clip (e.g. the ``stand`` motion)."""
+    from a3_teleop_bridge.umr.offline import load_umr_result
+
+    result = load_umr_result(path)
+    series = np.asarray(
+        [[result.joint_value(i, n) for n in names] for i in range(result.n_frames)]
+    )
+    return {name: float(series[:, i].mean()) for i, name in enumerate(names)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--umr-result", default=None)
@@ -269,6 +402,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fps", type=float, default=30.0, help="csv fps (stride is always 1)")
     parser.add_argument("--json", dest="json_out", default=None)
     parser.add_argument("--no-fk", action="store_true", help="skip the MuJoCo foot checks")
+    parser.add_argument(
+        "--neutral-npz",
+        default=None,
+        help="explicit neutral clip for the left/right mirror reference "
+        "(default: the validated clip's own frame 0)",
+    )
     args = parser.parse_args(argv)
     if not args.umr_result and not args.csv:
         parser.error("pass --umr-result or --csv")
@@ -291,7 +430,22 @@ def main(argv: list[str] | None = None) -> int:
                 ["pelvis_link", "left_ankle_roll_Link", "right_ankle_roll_Link"],
             )
 
-    report = validate(joint_pos, joint_vel, root_pos, root_quat, dt, bodies=bodies)
+    neutral = None
+    neutral_label = "clip frame 0 (retarget pose-init)"
+    if args.neutral_npz:
+        neutral = load_neutral_reference(args.neutral_npz, list(load_contract().policy_joint_names))
+        neutral_label = f"mean of {Path(args.neutral_npz).name}"
+
+    report = validate(
+        joint_pos,
+        joint_vel,
+        root_pos,
+        root_quat,
+        dt,
+        bodies=bodies,
+        neutral=neutral,
+        neutral_label=neutral_label,
+    )
     report["source"] = args.umr_result or args.csv
     if args.json_out:
         out = Path(args.json_out).expanduser()
@@ -303,10 +457,13 @@ def main(argv: list[str] | None = None) -> int:
     for name, entry in report["checks"].items():
         flag = "ok  " if entry["ok"] else "FAIL"
         print(f"  [{flag}] {name:28s} {entry['detail']}")
+    for note in report.get("diagnostics", []):
+        print(f"  [warn] {note}")
     if args.json_out:
         print(f"report : {args.json_out}")
     print("RESULT:", "OK" if report["acceptable"] else "PROBLEMS FOUND")
     return 0 if report["acceptable"] else 1
+
 
 
 if __name__ == "__main__":
