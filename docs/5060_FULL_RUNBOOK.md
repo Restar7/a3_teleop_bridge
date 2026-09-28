@@ -761,6 +761,22 @@ PICO 头显 ──Wi-Fi──► PC Service(本机,监听 127.0.0.1:60061)
 现在 live 也接了:服务端会用**头显前 ~1.5 秒的帧**自动标定(操作者这段时间站直别动),
 也可以用 `--save-calibration` 存下来、下次 `--calibration` 直接载入。
 
+**没有头显也能测 live 路径**(`--replay` 测不到它)
+
+`--replay` 走的是录制加载器,**完全不经过 ZMQ 订阅端**,所以上面这两个 live 才有的问题
+它一个都测不出来。要测就得造一个"假头显",发和真发送端**逐字节同格式**的包:
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+$PY_BRIDGE tools/fake_pico_sender.py --recording $A3WS/recordings/all/m5_stand --duration 60 &
+$PY_UMR -m a3_teleop_bridge.apps.retarget_live --source pico --backend umr-online \
+    --no-publish --duration 20
+# 期望:[live] states [..., 'TRACKING', ...]  且 [live] auto-calibrated from N live frames
+```
+
+（payload 只有 `smpl_pose`/`smpl_joints`/`body_quat_w`,**故意不带 root** —— 和真发送端一致;
+`--with-root` 可以验证"显式给了 root 时仍然优先用它"。）
+
 **⚠️ 端口通 ≠ 头显在推数据**(本机实测踩过):
 
 PC Service 会**先接受头显的 TCP 连接**(63901),而 `is_body_data_available()` 仍然是 False ——

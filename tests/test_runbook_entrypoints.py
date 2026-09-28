@@ -182,3 +182,26 @@ def test_pico_sender_output_is_reachable_while_it_runs():
     source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
     assert "waiting for body data" in source, "the wrapper should watch for this line live"
     assert '"-u"' in source or " -u " in source
+
+
+def test_fake_pico_sender_matches_the_real_payload():
+    """The harness that caught the live-path fall must stay usable.
+
+    --replay never touches the ZMQ subscriber, so this tool is the only way to
+    exercise the packet -> frame path on a desk.
+    """
+    path = BRIDGE_ROOT / "tools" / "fake_pico_sender.py"
+    assert path.is_file()
+    proc = subprocess.run([sys.executable, str(path), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    source = path.read_text(encoding="utf-8")
+    # must be byte-compatible with pico_pose_zmq_minimal.py, i.e. no root by default
+    for field in ('"smpl_pose"', '"smpl_joints"', '"body_quat_w"'):
+        assert field in source
+    assert '"root_translation"' in source, "--with-root should be able to publish one"
+    assert "PACKED_HEADER_SIZE = 1280" in source
+
+
+def test_pico_sim_exposes_the_fake_sender_for_desk_testing():
+    source = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "tools/fake_pico_sender.py" in source
