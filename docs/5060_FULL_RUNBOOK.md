@@ -19,12 +19,21 @@
 装好之后(§1–§5 走完),剩下就只有两件事,**各一条命令**:
 
 ```bash
-cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+cd /home/wusichen/a3_teleop_ws
+
+# ⓪ 先同步三个仓库(改动分布在三个仓库,只 pull 一个会很难查;详见 §17.0.1)
+git -C a3_teleop_bridge pull --ff-only
+git -C UMR             pull --ff-only
+git -C sonic_for_a3    pull --ff-only
+
+cd a3_teleop_bridge && source scripts/env_orin.sh
 
 # ① PICO 头显 → 仿真遥操(MuJoCo 里的 A3 跟着你动)
+bash scripts/run_pico_sim.sh --check     # 先自检:11 ok / 0 failed 再往下
 bash scripts/run_pico_sim.sh
 
 # ② PICO 头显 → 真机(发布 A3_REFERENCE_V1,A3 侧订阅)
+bash scripts/run_robot_live.sh --check
 bash scripts/run_robot_live.sh --a3-host <A3的IP> --duration 1800 --confirm-live
 ```
 
@@ -623,6 +632,45 @@ bash scripts/check_orin_ready.sh      # 期望 16 ok, 0 failed(零配置)
 
 ---
 
+### 17.0.1 开工前:同步三个仓库(每次改完代码都要做)
+
+改动分布在**三个仓库**,只 pull 一个会得到"离线对了、现场还是老行为"这种最难查的状态。
+逐条复制:
+
+```bash
+cd /home/wusichen/a3_teleop_ws
+
+# ① bridge(验收工具、validator、runbook、live 链路)
+git -C a3_teleop_bridge pull --ff-only
+
+# ② UMR(膝姿态先验 solver.joint_map_cost;没有它 A3 的膝永远不弯)
+git -C UMR pull --ff-only
+
+# ③ sonic_for_a3(PICO 发送端:root_translation / 帧率)
+git -C sonic_for_a3 pull --ff-only
+
+# 确认三个都到位(应该都是最新 commit、没有 dirty)
+git -C a3_teleop_bridge log --oneline -1
+git -C UMR             log --oneline -1
+git -C sonic_for_a3    log --oneline -1
+```
+
+> `dirty=N`(N>0)说明有本地改动,先 `git -C <repo> status` 看一眼再继续。
+> UMR 里有 3 个 untracked(`data/`、`humanoid_retarget_defaults_a3_validation.json`、
+> `smpl/version.txt`)是正常的,那是运行产物,不是你的改动。
+
+**一条命令做完上面全部(含自检)**:
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh \
+  && for r in . ../UMR ../sonic_for_a3; do git -C "$r" pull --ff-only; done \
+  && bash scripts/check_orin_ready.sh
+```
+
+看到 `[ready] 16 ok, 0 failed` 就可以往下走。
+
+---
+
 ### 17.1 仿真里的 PICO 遥操 —— `run_pico_sim.sh`
 
 ```bash
@@ -1030,6 +1078,47 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 | **仿真 C(真头显)** | **`bash scripts/run_pico_sim.sh`** | ⏳ 需 PC Service + 头显 |
 | **真机** | **`bash scripts/run_robot_live.sh --confirm-live`** | ⏳ 需 A3 侧部署包 + 悬吊 + 安全员 |
 | 可选:官方 AimSim | §8 | 需 AimDK 的 `aimsim` wheel,未做 |
+
+**第一次跑之前先看 §17.4 的自检清单**(对几条就能判断修复有没有生效);§17.5 是 2026-09-28 这轮「按现象查根因」的完整对照表。
+
+### 17.4 修复后应该看到的变化(自检清单)
+
+拉完代码第一次跑,对着这几条看,就知道修复有没有生效:
+
+```text
+[ ] scripts/run_pico_sim.sh --check
+      期望 11 ok / 0 failed,其中必须有:
+        [ OK ] headset is streaming body tracking (SDK sees body data)
+      若是 [FAIL] ... NO body data → 头显 App 掉了,重开 App(见 §17.1.1)
+
+[ ] 启动后终端里出现
+      [live] auto-calibrated from N live frames: ...
+      [live-chain] states [..., 'TRACKING', ...]
+      没有 TRACKING 就说明标定没过,先站直 1~2 秒别动
+
+[ ] 站着不动时,机器人应该是【手臂自然垂在身体两侧】
+      旧版本是【手臂向两边平举】(T-pose)。这是 §17.2.6 那个源动作问题的修复效果
+
+[ ] 走两步 → 机器人应该跟着【整体移动】
+      旧版本只会原地踏步(发送端根本没发位移)
+
+[ ] 状态栏不应频繁在 TRACKING/HOLD 之间跳
+      仍会偶发(solver ~21 Hz 是瓶颈),但比修复前(48% 丢帧)明显减少
+```
+
+### 17.5 本轮修了什么(2026-09-28,按现象查)
+
+| 现象 | 根因 | 修在哪 |
+| --- | --- | --- |
+| 站立不动也**直接倒地**,root_err→1.24 m 但 joint_l1 正常 | 发送端发的 `body_quat_w` 是**机载 deploy 运行时**的调整后坐标系,而 UMR 要的是 SMPL-X 的 root 朝向;多出两个因子把整个人转歪 | `zmq_subscriber.sender_root_quat_to_smplx()`(精确还原,任意姿态误差 1e-16) |
+| 参考的骨盆**在地面上**(比机器人站的地方低 0.975 m) | 发送端不发 root 平移,bridge 兜底成 `[0,0,0]` | `DEFAULT_STANDING_PELVIS_HEIGHT_M`(缺 root 时重建为站立高度) |
+| 状态机**永远停在 CALIBRATION** | 自动标定只覆盖 `trajectory`/`recording`,`pico` 没有路径 | `retarget_live.py` 用 live 前 ~1.5 s 的帧自动标定 |
+| **走不动**,大步迈→原地踏步 | 发送端算了 `positions` 却丢弃,位移从未离开头显 | 发送端发布 `root_translation`(Z-up + 首帧锚定 + 站立高度) |
+| **手臂向两边平举** | 源动作生成器从 SMPL-X rest 骨架插值,而 rest 骨架手臂是 74–82°(几乎水平);retarget 忠实复现了它 | 生成器加**自然站姿**(手臂 9.5°/12° 下垂),全链重建 |
+| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | 发送端默认 30 Hz + `hold_after_ms` 50→150 ms(未根治,瓶颈在 solver) |
+| 膝**从来不弯** | 目标函数里膝无约束,foot 点云项主导 | UMR 实现 `solver.joint_map_cost` 膝姿态先验 |
+| 忘了按 A 键时**报 JSONDecodeError** | stats 里的 `None` 不是合法 JSON | `ast.literal_eval` 解析 |
+| SDK 编译在链接阶段失败 | `libPXREARobotSDK.so` 是 git-lfs 指针(133 字节) | `git lfs pull` |
 
 相关文档:`DEPLOY_TARGET_DECISION.md`(选型)· `ORIN_FULL_RUNBOOK.md`(姊妹篇)·
 `SIM_TELEOP.md`(仿真细节与判据)· `A3_ONBOARD.md`(机载与适配节点)·
