@@ -2,34 +2,34 @@
   "stage": "M1",
   "tag": "full",
   "command": [
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/.venv_sim/bin/python",
+    "$A3WS/sonic_for_a3/.venv_sim/bin/python",
     "gear_sonic/scripts/sim2sim_a3_mujoco.py",
     "--checkpoint",
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "$A3WS/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
     "--motion",
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+    "$A3WS/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
     "--encoder-mode",
     "a3_fast",
     "--mjcf",
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+    "$A3WS/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
     "--batch-once",
     "--metrics-out",
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_metrics.json",
+    "$A3WS/logs/baseline/full_metrics.json",
     "--timeseries-out",
-    "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_timeseries.json"
+    "$A3WS/logs/baseline/full_timeseries.json"
   ],
-  "cwd": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3",
+  "cwd": "$A3WS/sonic_for_a3",
   "elapsed_s": 25.078930616378784,
   "returncode": 0,
   "checkpoint": {
-    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
+    "path": "$A3WS/sonic_for_a3/checkpoints/035_step200000/model_step_200000.pt",
     "sha256": "9cf33be2f4e602858b68ce31d5824113ab1dda250acaab5842b6d3bf88b70f2d",
     "sha256_matches_release": true,
-    "config_yaml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/checkpoints/035_step200000/config.yaml"
+    "config_yaml": "$A3WS/sonic_for_a3/checkpoints/035_step200000/config.yaml"
   },
-  "mjcf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
-  "urdf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf",
-  "motion": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
+  "mjcf": "$A3WS/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+  "urdf": "$A3WS/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf",
+  "motion": "$A3WS/sonic_for_a3/a3_data/agibot_a3/001_walk_front_slow.csv",
   "encoder_mode": "a3_fast",
   "policy_hz": 50.0,
   "policy_dt": 0.02,
@@ -273,13 +273,13 @@
     }
   },
   "timeseries": {
-    "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_timeseries.json",
+    "path": "$A3WS/logs/baseline/full_timeseries.json",
     "samples": 1652,
     "non_finite_frames": 0,
     "q_min": -1.0683858239889144,
     "q_max": 1.3927577018737793
   },
-  "log": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/baseline/full_run.log",
+  "log": "$A3WS/logs/baseline/full_run.log",
   "acceptable": true,
   "problems": []
 }

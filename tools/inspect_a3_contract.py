@@ -29,6 +29,10 @@ from pathlib import Path
 BRIDGE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = BRIDGE_ROOT / "generated" / "a3_contract.json"
 
+sys.path.insert(0, str(BRIDGE_ROOT / "src"))
+
+from a3_teleop_bridge import paths  # noqa: E402
+
 SIM2SIM_REL = "gear_sonic/scripts/sim2sim_a3_mujoco.py"
 OBS_BUILDER_REL = (
     "gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/a3_deploy/a3_obs_builder.hpp"
@@ -60,22 +64,23 @@ REQUIRED_PY_CONSTANTS = (
 )
 
 
+def _relpath(value: str | Path, root: Path) -> str:
+    """Render ``value`` relative to ``root`` (portable), keeping it as-is if outside."""
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        return str(candidate)
+    try:
+        return str(candidate.relative_to(root))
+    except ValueError:
+        return str(candidate)
+
+
 def find_sonic_root(explicit: str | None = None) -> Path:
-    """Locate the sonic_for_a3 checkout (env var, then well-known paths)."""
-    candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit))
-    if os.environ.get("SONIC_A3_ROOT"):
-        candidates.append(Path(os.environ["SONIC_A3_ROOT"]))
-    candidates.append(Path.home() / "a3_teleop_ws" / "sonic_for_a3")
-    candidates.append(BRIDGE_ROOT.parent / "sonic_for_a3")
-    for cand in candidates:
-        if (cand / SIM2SIM_REL).is_file():
-            return cand.expanduser().resolve()
-    raise SystemExit(
-        "Could not find sonic_for_a3. Set SONIC_A3_ROOT or pass --sonic-root.\n"
-        f"Tried: {[str(c) for c in candidates]}"
-    )
+    """Locate the sonic_for_a3 checkout via the shared, machine-independent resolver."""
+    try:
+        return paths.resolve_sonic_root(explicit=explicit)
+    except paths.PathResolutionError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 class _UnsupportedExpression(Exception):
@@ -300,7 +305,15 @@ def build_contract(sonic_root: Path) -> dict:
     contract = {
         "schema": "a3_contract/v1",
         "generated_by": "tools/inspect_a3_contract.py",
-        "sonic_root": str(sonic_root),
+        # NEVER write the generating machine's absolute path here: this file is
+        # committed.  `sonic_root` is left null and the loader resolves the checkout
+        # on the current machine (SONIC_A3_ROOT -> this value if it exists ->
+        # sibling directory), while every asset path below is relative to it.
+        "sonic_root": None,
+        "sonic_root_hint": (
+            "resolved at load time: $SONIC_A3_ROOT, then this value if it exists, "
+            "then the sibling directory 'sonic_for_a3' next to a3_teleop_bridge"
+        ),
         "sources": {
             "sim2sim": SIM2SIM_REL,
             "obs_builder": OBS_BUILDER_REL,
@@ -360,11 +373,14 @@ def build_contract(sonic_root: Path) -> dict:
             "obs_term_dims": dict(consts["OBS_TERM_DIMS"]),
         },
         "assets": {
-            "mjcf": str(sonic_root / consts["DEFAULT_LOOP_MJCF"]),
-            "mjcf_rel": str(consts["DEFAULT_LOOP_MJCF"]),
-            "urdf": str(sonic_root / consts["DEFAULT_URDF"]),
-            "urdf_rel": str(consts["DEFAULT_URDF"]),
-            "sample_csv": str(sonic_root / SAMPLE_CSV_REL),
+            # Asset paths are stored RELATIVE to sonic_root (portable); the *_abs
+            # fields are informational only.  Nothing in the repo may depend on a
+            # machine-specific absolute path.
+            "mjcf": _relpath(consts["DEFAULT_LOOP_MJCF"], sonic_root),
+            "mjcf_rel": _relpath(consts["DEFAULT_LOOP_MJCF"], sonic_root),
+            "urdf": _relpath(consts["DEFAULT_URDF"], sonic_root),
+            "urdf_rel": _relpath(consts["DEFAULT_URDF"], sonic_root),
+            "sample_csv": _relpath(SAMPLE_CSV_REL, sonic_root),
         },
     }
     return contract
@@ -453,11 +469,13 @@ def assert_contract(contract: dict) -> list[str]:
           il_names != list(contract["policy_joint_names"]),
           "encoder order is a real permutation of the CSV/MJCF order")
 
-    mjcf = Path(contract["assets"]["mjcf"])
+    # assets are stored relative to the (re-resolved) sonic root
+    root = paths.resolve_sonic_root(contract_value=contract.get("sonic_root"))
+    mjcf = paths.rebase_asset(contract["assets"]["mjcf"], contract.get("sonic_root"), root)
     check("mjcf_exists", mjcf.is_file(), f"MJCF present: {mjcf}")
-    urdf = Path(contract["assets"]["urdf"])
+    urdf = paths.rebase_asset(contract["assets"]["urdf"], contract.get("sonic_root"), root)
     check("urdf_exists", urdf.is_file(), f"URDF present: {urdf}")
-    sample = Path(contract["assets"]["sample_csv"])
+    sample = paths.rebase_asset(contract["assets"]["sample_csv"], contract.get("sonic_root"), root)
     check("sample_csv_exists", sample.is_file(), f"official sample CSV present: {sample}")
     return checks
 

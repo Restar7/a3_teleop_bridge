@@ -25,7 +25,7 @@ M7  实时 PICO                                   需要 PICO 4 硬件
 
 ```bash
 # 工作区(仓库已按 <workspace>/ 布局)
-export A3WS=~/a3_teleop_ws                 # -> /inspire/hdd/.../wsc-workspace/a3_teleop_ws
+export A3WS=~/a3_teleop_ws                 # 工作区根目录,按你的实际路径改
 export SONIC_A3_ROOT=$A3WS/sonic_for_a3
 source $A3WS/env.sh                        # 可选:统一导出上面的变量
 ```

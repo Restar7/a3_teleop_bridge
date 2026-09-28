@@ -71,9 +71,12 @@ class UmrRetargetSession:
     # ------------------------------------------------------------------
     @property
     def _root(self) -> Path:
+        """UMR checkout: explicit -> $UMR_ROOT -> sibling of this repo."""
+        from .. import paths
+
         if self.umr_root:
             return Path(self.umr_root).expanduser()
-        return Path.home() / "a3_teleop_ws" / "UMR"
+        return paths.resolve_umr_root()
 
     def _load_module(self):
         root = self._root
@@ -555,7 +558,9 @@ def _umr_root_from_config(config_data) -> Path:
     module = sys.modules.get("umr_retarget_smpl")
     if module is not None and getattr(module, "ROOT", None):
         return Path(module.ROOT)
-    return Path.home() / "a3_teleop_ws" / "UMR"
+    from .. import paths
+
+    return paths.resolve_umr_root()
 
 
 def _prepare_caches(module, args, model, faces):

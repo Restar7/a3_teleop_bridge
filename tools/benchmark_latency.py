@@ -34,6 +34,8 @@ import numpy as np
 BRIDGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BRIDGE_ROOT / "src"))
 
+from a3_teleop_bridge import paths  # noqa: E402
+
 from a3_teleop_bridge.a3.csv_export import A3FlatCsvCodec  # noqa: E402
 from a3_teleop_bridge.a3.predictor import A3ReferencePredictor  # noqa: E402
 from a3_teleop_bridge.clocks import LatencyStats  # noqa: E402
@@ -62,8 +64,8 @@ def timed(fn, iterations: int, warmup: int = 5) -> LatencyStats:
 
 def find_default_umr_result() -> Path | None:
     candidates = [
-        Path.home() / "a3_teleop_ws" / "UMR" / "output" / "a3_validation" / "stand_smplx_agibot_a3.npz",
-        Path.home() / "a3_teleop_ws" / "UMR" / "output" / "agibot_a3_retarget" / "dance1_subject2_smplx_agibot_a3.npz",
+        paths.workspace_root() / "UMR" / "output" / "a3_validation" / "stand_smplx_agibot_a3.npz",
+        paths.workspace_root() / "UMR" / "output" / "agibot_a3_retarget" / "dance1_subject2_smplx_agibot_a3.npz",
     ]
     for cand in candidates:
         if cand.is_file():
@@ -73,7 +75,7 @@ def find_default_umr_result() -> Path | None:
 
 def umr_throughput_from_log() -> dict | None:
     """Read the retarget throughput out of the UMR log if it is available."""
-    log = Path.home() / "a3_teleop_ws" / "logs" / "umr" / "a3_retarget.log"
+    log = paths.workspace_root() / "logs" / "umr" / "a3_retarget.log"
     if not log.is_file():
         return None
     text = log.read_text(encoding="utf-8", errors="replace")

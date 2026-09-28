@@ -40,9 +40,10 @@ from scipy.spatial.transform import Rotation
 BRIDGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BRIDGE_ROOT / "src"))
 
+from a3_teleop_bridge import paths  # noqa: E402
 from a3_teleop_bridge.contract import load_contract  # noqa: E402
 
-DEFAULT_OUT = Path.home() / "a3_teleop_ws" / "data" / "smplx_validation"
+DEFAULT_OUT = paths.workspace_root() / "data" / "smplx_validation"
 
 # SMPL-22 joint indices
 PELVIS, L_HIP, R_HIP, SPINE1, L_KNEE, R_KNEE, SPINE2, L_ANKLE, R_ANKLE, SPINE3, L_FOOT, R_FOOT = range(12)
@@ -176,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     contract = load_contract()
-    sonic_root = Path(args.sonic_root).expanduser() if args.sonic_root else contract.sonic_root
+    sonic_root = paths.resolve_sonic_root(
+        explicit=args.sonic_root, contract_value=contract.raw.get("sonic_root")
+    )
     rest_npz = sonic_root / "gear_sonic/data/human/human_joints_info.npz"
     if not rest_npz.is_file():
         raise SystemExit(f"missing rest skeleton: {rest_npz}")

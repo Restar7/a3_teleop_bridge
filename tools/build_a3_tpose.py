@@ -266,6 +266,14 @@ def verify_arm(model: Model, side: str, angles: dict[str, float]) -> dict:
     }
 
 
+def _portable_source(value: Path, sonic_root: Path) -> str:
+    """Render a source path relative to the sonic checkout (portable provenance)."""
+    try:
+        return str(Path(value).relative_to(sonic_root))
+    except ValueError:
+        return str(value)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mjcf", default=None)
@@ -351,7 +359,8 @@ def main(argv: list[str] | None = None) -> int:
     doc = {
         "schema": "a3_tpose/v1",
         "generated_by": "tools/build_a3_tpose.py",
-        "mjcf": str(mjcf),
+        # portable provenance: relative to the sonic checkout, never an absolute path
+        "mjcf": _portable_source(mjcf, contract.sonic_root),
         "method": (
             "bounded least-squares over shoulder pitch/roll/yaw + elbow per side, "
             "objective = arm axis along ±Y with straight elbow; legs/head fixed at "

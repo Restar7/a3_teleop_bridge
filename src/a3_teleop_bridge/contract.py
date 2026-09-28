@@ -18,6 +18,9 @@ BRIDGE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT_PATH = BRIDGE_ROOT / "generated" / "a3_contract.json"
 
 
+from . import paths
+
+
 class ContractError(RuntimeError):
     """Raised when the contract file is missing, stale or inconsistent."""
 
@@ -28,6 +31,7 @@ class A3Contract:
 
     raw: dict
     path: Path
+    _sonic_root: Path | None = None
 
     # ---- joints ---------------------------------------------------------
     @property
@@ -131,20 +135,53 @@ class A3Contract:
 
     # ---- assets ---------------------------------------------------------
     @property
+    def sonic_root(self) -> Path:
+        """Resolved on *this* machine; the recorded value is only a hint.
+
+        ``generated/a3_contract.json`` is committed, so its ``sonic_root`` was
+        written on whichever machine generated it.  Resolution order:
+        ``SONIC_A3_ROOT`` -> recorded value (only if it exists here) -> sibling
+        checkout -> error.  No developer path is ever hard-coded.
+        """
+        if self._sonic_root is None:
+            object.__setattr__(
+                self,
+                "_sonic_root",
+                paths.resolve_sonic_root(contract_value=self.raw.get("sonic_root")),
+            )
+        return self._sonic_root
+
+    def _asset(self, key: str) -> Path:
+        """Resolve an asset on this machine.
+
+        The committed contract stores these paths *relative* to ``sonic_root``; a
+        legacy/absolute value is rebased onto the resolved root instead, so a
+        contract generated on another machine still works here.
+        """
+        assets = self.raw["assets"]
+        stored = assets[key]
+        candidate = Path(stored)
+        if not candidate.is_absolute():
+            resolved = self.sonic_root / candidate
+            if resolved.exists():
+                return resolved
+            # fall through to the informational absolute field if present
+            stored = assets.get(f"{key}_abs", stored)
+        rebased = paths.rebase_asset(stored, self.raw.get("sonic_root"), self.sonic_root)
+        assert rebased is not None  # keys are required by validate()
+        return rebased
+
+    @property
     def mjcf_path(self) -> Path:
-        return Path(self.raw["assets"]["mjcf"])
+        return self._asset("mjcf")
 
     @property
     def urdf_path(self) -> Path:
-        return Path(self.raw["assets"]["urdf"])
+        return self._asset("urdf")
 
     @property
     def sample_csv_path(self) -> Path:
-        return Path(self.raw["assets"]["sample_csv"])
-
-    @property
-    def sonic_root(self) -> Path:
-        return Path(self.raw["sonic_root"])
+        return self._asset("sample_csv")
 
     # ---- csv layout -----------------------------------------------------
     @property

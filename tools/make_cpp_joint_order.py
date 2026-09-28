@@ -79,6 +79,15 @@ inline constexpr std::array<int, kA3TeleopJointCount> kA3IlToPolicyIndex = {{{il
 '''
 
 
+def portable_source(value) -> str:
+    """Render a source path for the generated header without a machine path."""
+    candidate = Path(str(value))
+    try:
+        return "$A3WS/" + str(candidate.resolve().relative_to(BRIDGE_ROOT.parent))
+    except ValueError:
+        return str(candidate)
+
+
 def main(argv: list[str] | None = None) -> int:
     import hashlib
 
@@ -106,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
 
     raw = Path(args.contract).read_bytes()
     text = TEMPLATE.format(
-        source=args.contract,
+        source=portable_source(args.contract),
         sha=hashlib.sha256(raw).hexdigest(),
         stamp=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         nj=len(policy),

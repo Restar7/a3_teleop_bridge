@@ -10,7 +10,7 @@
   "dt": 0.03333333333333333,
   "duration_s": 131.5,
   "robot_name": "unitree_g1",
-  "robot_xml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/assets/g1/dance1_subject2_smplx_unitree_g1.floating_mjcf.xml",
+  "robot_xml": "$A3WS/UMR/assets/g1/dance1_subject2_smplx_unitree_g1.floating_mjcf.xml",
   "source_sequence_key": "dance1_subject2",
   "source_format": "smplx_npz",
   "smpl_scale": 0.7153690457344055,

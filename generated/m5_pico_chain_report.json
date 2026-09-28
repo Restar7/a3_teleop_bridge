@@ -4,8 +4,8 @@
       "clip": "stand",
       "recording": {
         "ok": true,
-        "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_stand",
-        "log": "wrote /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_stand: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
+        "path": "$A3WS/recordings/m5_stand",
+        "log": "wrote $A3WS/recordings/m5_stand: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
       },
       "adapter": {
         "ok": true,
@@ -13,11 +13,11 @@
       },
       "umr": {
         "ok": true,
-        "log": "[batch] m5_stand               running \u2026\n[batch] m5_stand               OK  cost mean=0.0033 max=0.0035  -> m5_stand_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_pico\n"
+        "log": "[batch] m5_stand               running \u2026\n[batch] m5_stand               OK  cost mean=0.0033 max=0.0035  -> m5_stand_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into $A3WS/UMR/output/a3_pico\n"
       },
       "validation": {
         "ok": true,
-        "log": "m5_stand               PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/m5/stand/report.json\n"
+        "log": "m5_stand               PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: $A3WS/logs/m5/stand/report.json\n"
       },
       "pass": true
     },
@@ -25,8 +25,8 @@
       "clip": "lift_left_foot",
       "recording": {
         "ok": true,
-        "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_lift_left_foot",
-        "log": "wrote /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_lift_left_foot: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
+        "path": "$A3WS/recordings/m5_lift_left_foot",
+        "log": "wrote $A3WS/recordings/m5_lift_left_foot: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
       },
       "adapter": {
         "ok": true,
@@ -34,11 +34,11 @@
       },
       "umr": {
         "ok": true,
-        "log": "[batch] m5_lift_left_foot      running \u2026\n[batch] m5_lift_left_foot      OK  cost mean=0.0098 max=0.0143  -> m5_lift_left_foot_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_pico\n"
+        "log": "[batch] m5_lift_left_foot      running \u2026\n[batch] m5_lift_left_foot      OK  cost mean=0.0098 max=0.0143  -> m5_lift_left_foot_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into $A3WS/UMR/output/a3_pico\n"
       },
       "validation": {
         "ok": true,
-        "log": "m5_lift_left_foot      PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/m5/lift_left_foot/report.json\n"
+        "log": "m5_lift_left_foot      PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: $A3WS/logs/m5/lift_left_foot/report.json\n"
       },
       "pass": true
     },
@@ -46,8 +46,8 @@
       "clip": "step_forward_slow",
       "recording": {
         "ok": true,
-        "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_step_forward_slow",
-        "log": "wrote /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_step_forward_slow: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
+        "path": "$A3WS/recordings/m5_step_forward_slow",
+        "log": "wrote $A3WS/recordings/m5_step_forward_slow: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
       },
       "adapter": {
         "ok": true,
@@ -55,11 +55,11 @@
       },
       "umr": {
         "ok": true,
-        "log": "[batch] m5_step_forward_slow   running \u2026\n[batch] m5_step_forward_slow   OK  cost mean=0.0072 max=0.0099  -> m5_step_forward_slow_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_pico\n"
+        "log": "[batch] m5_step_forward_slow   running \u2026\n[batch] m5_step_forward_slow   OK  cost mean=0.0072 max=0.0099  -> m5_step_forward_slow_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into $A3WS/UMR/output/a3_pico\n"
       },
       "validation": {
         "ok": true,
-        "log": "m5_step_forward_slow   PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/m5/step_forward_slow/report.json\n"
+        "log": "m5_step_forward_slow   PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: $A3WS/logs/m5/step_forward_slow/report.json\n"
       },
       "pass": true
     },
@@ -67,8 +67,8 @@
       "clip": "twist_torso_left",
       "recording": {
         "ok": true,
-        "path": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_twist_torso_left",
-        "log": "wrote /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/recordings/m5_twist_torso_left: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
+        "path": "$A3WS/recordings/m5_twist_torso_left",
+        "log": "wrote $A3WS/recordings/m5_twist_torso_left: 90 frames @ 30 fps\nstats: hz=30.00 finite=True\n"
       },
       "adapter": {
         "ok": true,
@@ -76,11 +76,11 @@
       },
       "umr": {
         "ok": true,
-        "log": "[batch] m5_twist_torso_left    running \u2026\n[batch] m5_twist_torso_left    OK  cost mean=0.0063 max=0.0082  -> m5_twist_torso_left_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/UMR/output/a3_pico\n"
+        "log": "[batch] m5_twist_torso_left    running \u2026\n[batch] m5_twist_torso_left    OK  cost mean=0.0063 max=0.0082  -> m5_twist_torso_left_smplx_agibot_a3.npz\n\n[batch] 1/1 clips retargeted into $A3WS/UMR/output/a3_pico\n"
       },
       "validation": {
         "ok": true,
-        "log": "m5_twist_torso_left    PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/logs/m5/twist_torso_left/report.json\n"
+        "log": "m5_twist_torso_left    PASS  numeric_validation=ok csv_export=ok mujoco=ok\n\n1/1 clips PASS\nreport: $A3WS/logs/m5/twist_torso_left/report.json\n"
       },
       "pass": true
     }

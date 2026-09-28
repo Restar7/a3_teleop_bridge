@@ -1,7 +1,7 @@
 {
   "schema": "a3_tpose/v1",
   "generated_by": "tools/build_a3_tpose.py",
-  "mjcf": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
+  "mjcf": "gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml",
   "method": "bounded least-squares over shoulder pitch/roll/yaw + elbow per side, objective = arm axis along \u00b1Y with straight elbow; legs/head fixed at the model neutral pose",
   "tpose_qpos": {
     "head_pitch_joint": 0.0,

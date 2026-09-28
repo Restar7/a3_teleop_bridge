@@ -12,10 +12,10 @@
   pwd; ls -la
   git -C <cwd> remote -v; git -C <cwd> rev-parse HEAD
   nvidia-smi; uname -a; python3 --version
-  df -h /root /inspire/hdd/global_user/liumengfan-253108110079
+  df -h /root <parent-of-workspace>
   git ls-remote https://github.com/Restar7/sonic_for_a3.git HEAD
   ```
-- **输入**: 当前 cwd = `/inspire/hdd/.../wsc-workspace/GR00T-WholeBodyControl`
+- **输入**: 当前 cwd = 上级工作区里的 `GR00T-WholeBodyControl` 克隆
 - **输出 / 发现**:
   1. 当前目录 **不是** `sonic_for_a3`,而是 `Restar7/GR00T-WholeBodyControl`
      (HEAD `3c2dbe1` "适配flowbody"),其文件树中**不存在**任何 A3 资产:
@@ -40,7 +40,7 @@
 - **执行命令**:
   ```bash
   apt-get install -y git-lfs && git lfs install --skip-repo
-  WS=/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws
+  WS=$A3WS
   mkdir -p "$WS" && ln -sfn "$WS" /root/a3_teleop_ws
   git clone https://github.com/Restar7/sonic_for_a3.git "$WS/sonic_for_a3"
   git clone https://github.com/hanyang9/UMR.git "$WS/UMR"
@@ -770,4 +770,50 @@
   `solver_latency_ms.p50`;>100 ms 时把 UMR 留在 4090/5060,只把参考流过以太网发给 A3
   —— **切换代价是 `configs/network.yaml` 的一行 `bind_host`**(协议与 A3 侧不变,方案 §51)
 - **文档**:新增 `docs/DEPLOY_TARGET_DECISION.md`;`MACHINE_ROLES.md`、`A3_OFFICIAL_INTERFACE.md` 已同步
+
+## 阶段 移植性 — 路径解析跨机器化(仓库可移植)
+
+- **触发**:在 5060 上 `python tools/make_smplx_validation_motions.py --out ...` 报找不到
+  `/inspire/.../sonic_for_a3/gear_sonic/data/human/human_joints_info.npz`;显式传
+  `--sonic-root` 就正常 —— 说明默认值来自**别的机器写进仓库的绝对路径**。
+- **根因**:`generated/a3_contract.json` 是**提交进仓库**的,里面存了生成机器上的
+  `sonic_root` 与 `assets.*` 绝对路径;`A3Contract.sonic_root / mjcf_path / urdf_path /
+  sample_csv_path` 直接返回这些值。凡是以 contract 为默认值的工具,换台机器必挂。
+  另外 `UMR/.npz` 里也存了生成机器上的 `robot_xml` 绝对路径,同样会在异地读取时失败。
+- **修法(不替换字符串,而是把机制改对)**:
+  1. 新增 `src/a3_teleop_bridge/paths.py` —— **唯一**的路径解析入口,优先级固定为
+     `CLI 参数 → 环境变量 → contract/config 值(仅当在本机存在)→ 同级目录推断 → 明确报错`。
+     没有任何"开发者固定路径"兜底。
+  2. `contract.py`:`sonic_root` 改为**运行时解析**(带缓存);`assets` 改为**优先相对路径**,
+     绝对路径只作兜底并会按记录的 root 重新锚定。
+  3. `inspect_a3_contract.py`:写 contract 时 `sonic_root` 写 `null`(并给 hint),
+     `assets.*` 一律写**相对 sonic_root** 的路径 —— 仓库里不再有机器路径。
+  4. `extract_a3_joint_limits.py` / `build_a3_tpose.py`:来源信息改为相对路径。
+  5. `umr/offline.py`:UMR 结果里的 `robot_xml` 缺失时,先按结果目录相对路径找,再把
+     `sonic_for_a3/` 之后的部分**重新锚定到本机 checkout**,最后给出可操作的报错
+     (提示设 `SONIC_A3_ROOT` / 用 `--force` 重新生成 / 显式传 `robot_xml=`)。
+  6. 清掉代码里所有 `Path.home()/"a3_teleop_ws"` 之类的猜测:`umr_session.py`、
+     `umr/backends.py`、`benchmark_latency.py`、`make_smplx_validation_motions.py` 等改用
+     `paths.workspace_root()` / `resolve_umr_root()`。
+  7. 已提交的产物与文档里的 `/inspire/...` 前缀统一改为 `$A3WS`(报告、PLAN、progress、README)。
+- **验证(全部实测)**:
+  ```text
+  grep -RIn --exclude-dir=.git '/inspire/hdd/global_user\|wsc-workspace' .   → 无输出
+  git grep 两个仓库的 tracked 文件                                            → 无机器路径
+  pytest tests integration -q                                                  → 见下方全套结果
+  新建“伪装的另一台机器” /tmp/foreignws/{a3_teleop_bridge,sonic_for_a3->symlink,UMR->symlink}
+    不设 SONIC_A3_ROOT/UMR_ROOT/A3WS、不传 --sonic-root:
+      make_smplx_validation_motions.py --out /tmp/foreign_out --duration 3      → wrote 9 clips / RESULT: OK
+      make_synthetic_pico_recording.py --clip .../twist_torso_left.npz          → 90 帧 @30fps
+      convert_pico_recording.py                                                 → 适配器 OK
+      run_umr_a3_batch.py --out-dir /tmp/foreign_umr --force                     → cost mean 0.0063
+      run_a3_validation_suite.py --only m5_twist_torso_left --skip-mujoco       → 1/1 clips PASS
+  显式 --sonic-root 的旧用法仍可用                                             → RESULT: OK
+  ```
+- **新增测试**:`tests/test_paths.py`(12 项)——CLI 优先、env 压过 stale contract、
+  contract 存在时可用、contract 缺失时 fallback、同级目录自动发现、找不到时报错可操作、
+  源码里禁止机器路径(自检)、asset 重锚定、UMR robot_xml 重锚定、已提交 contract 不含机器路径。
+- **注**:`*.floating_mjcf.xml` 是 UMR 的**运行产物**(被 gitignore),它记录的是**本机**路径,
+  每次运行都会重写,不属于"仓库可移植"问题;本轮曾误删,已用 `run_umr_a3_batch.py --force` 重新生成。
+- **下一阶段**: 5060 上 `git pull --ff-only` 后按同一命令复验(不带 `--sonic-root`)
 

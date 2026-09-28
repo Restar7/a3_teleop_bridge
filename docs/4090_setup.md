@@ -13,7 +13,7 @@ gh        无(用 https clone)
 工作区布局:
 
 ```text
-~/a3_teleop_ws                       (-> /inspire/hdd/.../wsc-workspace/a3_teleop_ws)
+$A3WS                                 (本例:~/a3_teleop_ws;也可用任意路径)
 ├── sonic_for_a3/                    Restar7/sonic_for_a3 @ fe6868b,分支 feat/a3-streaming-reference
 ├── UMR/                             hanyang9/UMR @ c56b630,分支 feat/a3-online-retarget
 ├── GR00T-WholeBodyControl ->       已有 clone(未重复 clone)

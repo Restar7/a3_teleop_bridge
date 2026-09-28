@@ -1,9 +1,10 @@
 schema: a3_joint_limits/v1
 generated_by: tools/extract_a3_joint_limits.py
 sources:
-  mjcf: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml
-  urdf: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf
-  policy_parameters: /inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/a3_policy_parameters.hpp
+  relative_to: sonic_for_a3
+  mjcf: gear_sonic/data/assets/robot_description/mjcf/a3_t2d5_loop_passive_foot_twostage_fit_optimized.xml
+  urdf: gear_sonic/data/assets/robot_description/urdf/a3/model_collision_optimized_passive_foot_twostage_fit_optimized.urdf
+  policy_parameters: gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/a3_policy_parameters.hpp
 policy_joint_order:
 - waist_yaw_joint
 - waist_roll_joint

@@ -10,7 +10,7 @@
   "dt": 0.03333333333333333,
   "duration_s": 131.5,
   "robot_name": "agibot_a3",
-  "robot_xml": "/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/dance1_subject2_smplx_agibot_a3.floating_mjcf.xml",
+  "robot_xml": "$A3WS/sonic_for_a3/gear_sonic/data/assets/robot_description/mjcf/dance1_subject2_smplx_agibot_a3.floating_mjcf.xml",
   "source_sequence_key": "dance1_subject2",
   "source_format": "smplx_npz",
   "smpl_scale": 0.9315134882926941,

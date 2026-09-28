@@ -12,7 +12,7 @@
 
 | 方案原文 | 本机实际 | 说明 |
 | --- | --- | --- |
-| `~/a3_teleop_ws` | `/inspire/hdd/global_user/liumengfan-253108110079/wsc-workspace/a3_teleop_ws`,并软链为 `~/a3_teleop_ws` | 家目录 `/root` 在 overlay 上,工程数据放在 gpfs 大盘 |
+| `~/a3_teleop_ws` | `$A3WS`,并软链为 `~/a3_teleop_ws` | 家目录 `/root` 在 overlay 上,工程数据放在 gpfs 大盘 |
 | `conda env umr` | `UMR/.venv_umr` (uv, Python 3.12) | 本机无 conda,使用 uv venv 等价隔离 |
 | `conda env a3_bridge` | `a3_teleop_bridge/.venv_bridge` (uv, Python 3.10) | 同上 |
 | `sonic_for_a3` | `a3_teleop_ws/sonic_for_a3` (Restar7/sonic_for_a3 fork) | **必须 clone**:当前 cwd 的 `GR00T-WholeBodyControl` clone 不含 A3 代码 |

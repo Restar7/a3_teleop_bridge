@@ -146,7 +146,9 @@ class UmrOnlineBackend:
     # ------------------------------------------------------------------
     @staticmethod
     def available(umr_root: Path | str | None = None) -> bool:
-        root = Path(umr_root).expanduser() if umr_root else Path.home() / "a3_teleop_ws" / "UMR"
+        from .. import paths
+
+        root = Path(umr_root).expanduser() if umr_root else paths.resolve_umr_root()
         return (root / "scripts" / "retarget_smpl_to_humanoid_surface_vector.py").is_file()
 
     def initialize(self, robot_config: Path | str | None = None) -> None:

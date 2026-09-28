@@ -92,7 +92,17 @@ def _scalar_joint_addrs(robot_xml: Path) -> dict[str, int]:
 
 
 def _resolve_robot_xml(raw: str, npz_path: Path) -> Path | None:
+    """Locate the robot XML recorded in a UMR result.
+
+    UMR stores an absolute path, which is stale as soon as the result is read on
+    another machine.  Resolution: the stored path -> the path relative to the
+    result -> the same path re-anchored on *this* machine's sonic checkout (the
+    part below ``sonic_for_a3/`` is machine independent) -> a floating MJCF with
+    the same file name inside the sonic checkout.
+    """
     import os
+
+    from .. import paths
 
     text = os.path.expandvars(os.path.expanduser(str(raw)))
     path = Path(text)
@@ -102,6 +112,33 @@ def _resolve_robot_xml(raw: str, npz_path: Path) -> Path | None:
         candidate = npz_path.parent / path
         if candidate.is_file():
             return candidate
+
+    # re-anchor a foreign absolute path on this machine's checkout
+    suffix = _suffix_after_sonic_root(path)
+    if suffix is not None:
+        try:
+            root = paths.resolve_sonic_root()
+        except paths.PathResolutionError:
+            root = None
+        if root is not None:
+            candidate = root / suffix
+            if candidate.is_file():
+                return candidate
+            # the floating MJCF is generated next to the source MJCF: try the same
+            # file name in the checkout's mjcf directory
+            for folder in ("gear_sonic/data/assets/robot_description/mjcf",):
+                candidate = root / folder / path.name
+                if candidate.is_file():
+                    return candidate
+    return None
+
+
+def _suffix_after_sonic_root(path: Path) -> Path | None:
+    """``/any/prefix/sonic_for_a3/gear_sonic/...`` -> ``gear_sonic/...``"""
+    parts = path.parts
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index] == "sonic_for_a3" and index + 1 < len(parts):
+            return Path(*parts[index + 1 :])
     return None
 
 
@@ -149,8 +186,14 @@ def load_umr_result(path: Path | str, robot_xml: Path | str | None = None) -> Um
         resolved_xml = _resolve_robot_xml(xml_raw, path)
     if resolved_xml is None or not resolved_xml.is_file():
         raise FileNotFoundError(
-            f"cannot resolve the robot XML for {path} (stored value: {xml_raw!r}); "
-            "pass robot_xml= explicitly"
+            f"cannot resolve the robot XML for {path} (stored value: {xml_raw!r}).\n"
+            "The result records the path of the UMR-generated floating MJCF, which lives "
+            "inside the sonic_for_a3 checkout.\n"
+            "Fix it by either:\n"
+            "  * setting SONIC_A3_ROOT to this machine's sonic_for_a3 checkout, or\n"
+            "  * regenerating the result here: tools/run_umr_a3_batch.py --force "
+            "(recreates the floating MJCF), or\n"
+            "  * passing robot_xml= explicitly."
         )
 
     addrs = _scalar_joint_addrs(resolved_xml)

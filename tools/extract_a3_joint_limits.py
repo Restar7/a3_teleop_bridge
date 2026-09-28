@@ -148,6 +148,14 @@ def parse_policy_parameters(path: Path) -> dict[str, list[float]]:
     return arrays
 
 
+def _relative_source(value: Path, sonic_root: Path) -> str:
+    """Render a source path relative to the sonic checkout (portable provenance)."""
+    try:
+        return str(Path(value).relative_to(sonic_root))
+    except ValueError:
+        return str(value)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sonic-root", default=None)
@@ -253,10 +261,13 @@ def main(argv: list[str] | None = None) -> int:
     doc = {
         "schema": "a3_joint_limits/v1",
         "generated_by": "tools/extract_a3_joint_limits.py",
+        # Provenance is stored RELATIVE to the sonic root so the committed artifact
+        # does not embed a developer's absolute workspace path.
         "sources": {
-            "mjcf": str(mjcf_path),
-            "urdf": str(urdf_path),
-            "policy_parameters": str(sonic_root / POLICY_PARAMS_REL),
+            "relative_to": "sonic_for_a3",
+            "mjcf": _relative_source(mjcf_path, sonic_root),
+            "urdf": _relative_source(urdf_path, sonic_root),
+            "policy_parameters": _relative_source(sonic_root / POLICY_PARAMS_REL, sonic_root),
         },
         "policy_joint_order": list(contract.policy_joint_names),
         "joint_count": n,
