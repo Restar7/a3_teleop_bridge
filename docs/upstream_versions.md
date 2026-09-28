@@ -11,10 +11,16 @@ branch    = main (feature branch: feat/a3-streaming-reference)
 checkpoint= 035_step200000/model_step_200000.pt (sha256 9cf33be2f4e602858b68ce31d5824113ab1dda250acaab5842b6d3bf88b70f2d)
 
 UMR:
-repo      = https://github.com/hanyang9/UMR
+repo      = https://github.com/hanyang9/UMR  (fork: Restar7/UMR)
 path      = ~/a3_teleop_ws/UMR
 commit    = c56b6301ded02a187a30cc6aafa4f535735104d2
 branch    = main (feature branch: feat/a3-online-retarget)
+A3 branch = feat/a3-online-retarget @ 086d46c
+            (84d3650 implements solver.joint_map_cost as the knee posture prior;
+             086d46c splits out the shared helpers the online session reuses)
+            The retarget WILL collapse the A3 knee without this: the objective
+            has no knee posture term, so the solver leaves it on the extension
+            stop.  See docs/mujoco_validation.md.
 
 GR00T-WholeBodyControl:
 repo      = https://github.com/Restar7/GR00T-WholeBodyControl (fork of NVlabs/GR00T-WholeBodyControl)
