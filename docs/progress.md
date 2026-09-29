@@ -1117,3 +1117,28 @@ hip_pitch −105.7°(官方 −102.6°)、骨盆落差 **0.523 m**(官方 **0.52
 `test_generated_motions_derive_the_root_from_the_pose`
 
 - **下一阶段**: 跳跃需先仿真验证腾空与落地;其余无硬件可做部分已完成。
+
+### M5c 补充:live 路径的深蹲会摔(以及一个把它藏起来的测试工具缺陷)
+
+把深蹲接到 live 链路复测(假发送端 + 真 sim2sim,串行、逐条确认发送端绑定):
+
+| 片段 | 离线验收 | live 链路 | live 机器人 root |
+| --- | --- | --- | --- |
+| m5_stand | fall=false | ACCEPTED | 1.061 m |
+| m5_bend_knees(浅蹲) | fall=false | ACCEPTED | 1.000 m |
+| m5_squat_deep(深蹲 52 cm) | fall=false | **FAILED(fall at tick 109, anchor_err 1.5 m)** | 0.482 m |
+
+live 是 warm-start + `iters=1`,参考流有缺口(`max_gap_ms` 1594 ms、`jumps=34`),
+深蹲在离线侧本就只是勉强站住(倾角 35.8°)。**live 已验证深度到浅蹲为止。**
+
+**测试工具缺陷(同一个问题被藏住的原因)**:`fake_pico_sender.py` 默认**不发
+`root_translation`**,帮助文字还写着"真发送端也不发" —— 那是过期描述,上一轮已让真发送端
+发布 root。因此订阅端一直合成恒定站高骨盆,深蹲/迈步的骨盆运动在桌面测试里被静默丢掉:
+**不带 root 不是"更小的测试",而是另一个测试。** 已改为默认发 root(`--no-root` 显式测兜底)。
+
+排查中还踩了两个测量陷阱(记录以免重犯):
+1. **`pkill -f` 会匹配到自己的 shell** —— 连续两次把调用它的命令行杀掉。改用
+   `pgrep -f "[f]ake_pico_sender"` 或按 PID。
+2. **发送端 stdout 被块缓冲**,日志里看不到 `bound tcp`,导致误判"绑定失败"。加 `-u`。
+3. 不串行化时,前一个发送端仍占着 5556,后一个**静默失败**,于是三次"不同片段"的测试
+   实际跑的是同一路输入 —— 三条 root_z 完全相同(1.060918091049555)才暴露出来。

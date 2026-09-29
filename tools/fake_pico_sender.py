@@ -8,8 +8,13 @@ reconstruction, which is what made the first real headset run fall over in
 0.8 s) is testable on a desk.
 
 Payload is byte-compatible with ``pico_pose_zmq_minimal.py``: root-relative
-joints + orientation, i.e. ``smpl_pose`` / ``smpl_joints`` / ``body_quat_w`` and
-deliberately **no** ``root_translation``.
+joints + orientation (``smpl_pose`` / ``smpl_joints`` / ``body_quat_w``) plus the
+``root_translation`` the real sender publishes.  Publishing the root is the
+default because leaving it out is not a smaller test, it is a *different* one:
+without it the subscriber synthesises a constant standing pelvis, so a squat or
+a step silently loses all of its pelvis motion and the desk test stops
+reproducing the path the headset drives.  Use ``--no-root`` to test that
+fallback explicitly.
 
 Usage:
     python tools/fake_pico_sender.py --recording $A3WS/recordings/all/m5_stand --duration 60 &
@@ -57,9 +62,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fps", type=float, default=50.0)
     parser.add_argument(
         "--with-root",
+        dest="with_root",
         action="store_true",
-        help="also publish root_translation (the real sender does not; useful to "
-        "prove an explicitly published root still wins)",
+        default=True,
+        help="publish root_translation, like the real sender does (default)",
+    )
+    parser.add_argument(
+        "--no-root",
+        dest="with_root",
+        action="store_false",
+        help="omit root_translation to exercise the subscriber's standing-pelvis fallback",
     )
     args = parser.parse_args(argv)
 

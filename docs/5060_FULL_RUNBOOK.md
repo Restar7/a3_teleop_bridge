@@ -992,8 +992,10 @@ $PY_UMR -m a3_teleop_bridge.apps.retarget_live --source pico --backend umr-onlin
 # 期望:[live] states [..., 'TRACKING', ...]  且 [live] auto-calibrated from N live frames
 ```
 
-（payload 只有 `smpl_pose`/`smpl_joints`/`body_quat_w`,**故意不带 root** —— 和真发送端一致;
-`--with-root` 可以验证"显式给了 root 时仍然优先用它"。）
+（payload 与真发送端一致:`smpl_pose`/`smpl_joints`/`body_quat_w` **+ `root_translation`**。
+**默认就发 root** —— 不带 root 不是"更小的测试",而是**另一个测试**:订阅端会合成一个恒定站高的
+骨盆,深蹲/迈步的骨盆运动会被静默丢掉。`--no-root` 才是显式去测那条兜底路径。
+> 这个默认值曾经是反的,后果是:桌面测试一直测不出"深蹲在 live 路径上摔倒"。）
 
 **⚠️ 端口通 ≠ 头显在推数据**(本机实测踩过):
 
@@ -1245,6 +1247,8 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 | **不能深蹲 / 抬腿**,骨盆一动不动 | 验收动作生成器把 root 写成**常量** `[0,0,root_height]`,骨盆被钉死;屈膝只能把脚踩穿地面 | `support_anchored_root()`:骨盆由"支撑脚踩地"反解(§17.8) |
 | 深蹲时髋角**顶在限位上** | 源侧髋屈 1.85 rad 过大,retarget 后到 −143°,正好撞 A3 的 −144° 下限 | `SQUAT_HIP_RAD` 1.85→1.15,落到 −105.7°(官方 −102.6°) |
 | **不能跳跃** | **策略侧空白**:官方 20 条参考 root 最高只到 110 cm(站立 106),不存在飞行阶段 | 未修 —— 参考能表达,但策略无腾空验证依据(§17.8.4) |
+| 深蹲**离线过了、live 摔** | live 是 warm-start+`iters=1` 且参考流有缺口(1594 ms);深蹲离线侧本就勉强 | 未根治 —— live 已验证到浅蹲;见 §17.8.3 的对照表 |
+| 桌面测试**测不出**上面的问题 | `fake_pico_sender.py` 默认**不发 root**,订阅端合成恒定站高骨盆,骨盆运动被静默丢掉 | 默认改为发 root,`--no-root` 才是显式测兜底路径 |
 
 ---
 
@@ -1477,8 +1481,22 @@ m5_lift_left_foot       False      1.048       11.5°    0.130 |   0.002     46.
 ...                                                   10/10 clips PASS
 ```
 
-**深蹲:机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。策略能蹲,不摔。**
-(代价:倾角 35.8°、跟踪 RMSE 0.151,是全集里最难的一条 —— 蹲得住,但姿态不如站立干净。)
+**深蹲(离线验收路径):机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。**
+代价是倾角 35.8°、跟踪 RMSE 0.151,是全集里最难的一条 —— 蹲得住,但姿态不如站立干净。
+
+> **⚠️ 但同一条深蹲走 live 路径会摔。** 两者不要混为一谈,实测(假发送端 + 真 sim2sim,
+> 串行、逐条确认发送端绑定):
+>
+> | 片段 | 离线验收 | live 链路 | live 机器人 root |
+> | --- | --- | --- | --- |
+> | `m5_stand` | fall=false | **ACCEPTED** | 1.061 m |
+> | `m5_bend_knees`(浅蹲,骨盆降 6 cm) | fall=false | **ACCEPTED** | 1.000 m |
+> | `m5_squat_deep`(深蹲,骨盆降 52 cm) | fall=false | **FAILED(fall at tick 109)** | 0.482 m |
+>
+> 原因:live 路径是 warm-start + `iters=1`,且参考流有缺口(`max_gap_ms` 1594 ms、
+> `jumps=34`),而深蹲在离线侧本来就只是**勉强站住**(倾角 35.8°、RMSE 0.151)。
+> **结论:live 路径已验证的深度到"浅蹲"为止;深蹲目前只保证离线,要在真机上做深蹲
+> 必须先修参考流的连续性(§17.6.1)再复测。**
 
 #### 17.8.4 跳跃为什么还是不行
 

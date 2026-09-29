@@ -195,11 +195,28 @@ def test_fake_pico_sender_matches_the_real_payload():
     proc = subprocess.run([sys.executable, str(path), "--help"], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     source = path.read_text(encoding="utf-8")
-    # must be byte-compatible with pico_pose_zmq_minimal.py, i.e. no root by default
+    # must be byte-compatible with pico_pose_zmq_minimal.py
     for field in ('"smpl_pose"', '"smpl_joints"', '"body_quat_w"'):
         assert field in source
-    assert '"root_translation"' in source, "--with-root should be able to publish one"
+    assert '"root_translation"' in source
     assert "PACKED_HEADER_SIZE = 1280" in source
+
+
+def test_fake_pico_sender_publishes_the_root_by_default():
+    """Omitting the root is not a smaller test, it is a different one.
+
+    The real sender publishes ``root_translation``.  While this tool defaulted to
+    leaving it out, the subscriber synthesised a constant standing pelvis, so
+    every desk test silently discarded the pelvis motion of a squat or a step --
+    which is exactly the failure class the desk tests exist to catch.  It hid a
+    live-path fall behind a frozen root.
+    """
+    source = (BRIDGE_ROOT / "tools" / "fake_pico_sender.py").read_text(encoding="utf-8")
+    assert 'dest="with_root"' in source
+    assert "default=True" in source, "the root must be published unless --no-root is given"
+    assert '"--no-root"' in source
+    # the stale "the real sender does not" claim must be gone
+    assert "the real sender does not" not in source
 
 
 def test_pico_sim_exposes_the_fake_sender_for_desk_testing():

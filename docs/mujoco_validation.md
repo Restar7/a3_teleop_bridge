@@ -288,8 +288,24 @@ online 膝角 0.244–0.274 rad(与离线 0.24 一致),solver p50 42.8 ms / p95 
 | m5_twist_torso_left | False | 1.069 | 2.0° | 0.045 | 0.000 | 14.0° |
 | m5_twist_torso_right | False | 1.069 | 2.0° | 0.043 | 0.000 | 14.0° |
 
-**深蹲:机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。策略能蹲,不摔。**
+**深蹲(离线验收路径):机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。**
 代价是倾角 35.8°、RMSE 0.151,全集最难的一条 —— 蹲得住,但姿态不如站立干净。
+
+**但同一条深蹲走 live 路径会摔**(串行实测,每条都先确认假发送端绑定成功):
+
+| 片段 | 离线验收 | live 链路 | live 机器人 root |
+| --- | --- | --- | --- |
+| m5_stand | fall=false | ACCEPTED | 1.061 m |
+| m5_bend_knees(浅蹲) | fall=false | ACCEPTED | 1.000 m |
+| m5_squat_deep(深蹲 52 cm) | fall=false | **FAILED(fall at tick 109)** | 0.482 m |
+
+live 路径是 warm-start + `iters=1`,参考流还有缺口(`max_gap_ms` 1594 ms、`jumps=34`),
+而深蹲在离线侧本来就只是勉强站住。**live 已验证的深度到浅蹲为止。**
+
+> 排查过程中还发现一个**测试工具缺陷**:`fake_pico_sender.py` 默认**不发
+> `root_translation`**(帮助文字说"真发送端也不发" —— 上一轮已经改掉了,是过期描述),
+> 于是订阅端合成恒定站高骨盆,**深蹲的骨盆运动在桌面测试里被静默丢掉**,这个问题因此
+> 一直测不出来。已改为默认发 root,`--no-root` 才是显式测兜底路径。
 
 ### 4. 跳跃仍未解决,而且不是链路问题
 
