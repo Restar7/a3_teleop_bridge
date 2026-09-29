@@ -16,6 +16,7 @@ start, exactly like the offline pipeline's inner loop does.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -23,7 +24,43 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["UmrRetargetSession", "UmrSessionError"]
+__all__ = ["UmrRetargetSession", "UmrSessionError", "configure_torch_threads"]
+
+#: Intra-op thread count for the *online* session.  One thread is not a
+#: compromise here: see :func:`configure_torch_threads`.
+DEFAULT_TORCH_THREADS = 1
+
+
+def configure_torch_threads(threads: int | None = None) -> int | None:
+    """Cap torch's intra-op threads; returns the count now in effect.
+
+    The online retarget spends most of its torch time in the SMPL-X linear
+    blend skinning, which multiplies *small* matrices (a handful of 55-joint
+    transforms per frame).  Splitting those across OpenMP threads costs more in
+    barrier synchronisation than the arithmetic it saves, so the default thread
+    count is actively harmful on a many-core box: measured on this 16-core
+    machine, the same 144-frame clip ran at p50 120.9 ms/frame (8.3 Hz) with
+    torch's default 14 threads, 47.9 ms (20.9 Hz) with 2, and 31.1 ms (32.1 Hz)
+    with 1.  The live pipeline's 50 Hz reference then stops arriving on time and
+    the solver becomes the teleop bottleneck it was reported to be.
+
+    ``A3_TORCH_THREADS`` overrides the default; a value of ``0``, ``off`` or
+    ``default`` leaves torch's own setting untouched (useful when debugging or
+    when running on a CPU where the defaults do win).
+    """
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - the UMR venv always has torch
+        return None
+
+    if threads is None:
+        raw = os.environ.get("A3_TORCH_THREADS", "").strip().lower()
+        if raw in ("0", "off", "default", "none"):
+            return int(torch.get_num_threads())
+        threads = int(raw) if raw else DEFAULT_TORCH_THREADS
+    if threads > 0:
+        torch.set_num_threads(int(threads))
+    return int(torch.get_num_threads())
 
 
 class UmrSessionError(RuntimeError):
@@ -121,8 +158,11 @@ class UmrRetargetSession:
     def initialize(self) -> None:
         """Build every heavy object exactly once."""
         started = time.perf_counter()
+        threads = configure_torch_threads()
         if self.verbose:
             print("[umr-online] loading the UMR retarget module …")
+            if threads is not None:
+                print(f"[umr-online] torch intra-op threads = {threads} (A3_TORCH_THREADS overrides)")
         module = self._load_module()
         import smpl_surface_retarget_common as common  # noqa: E402  (UMR scripts dir)
         import retarget_body_segment_surface as body_segment  # noqa: E402

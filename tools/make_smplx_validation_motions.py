@@ -188,6 +188,12 @@ def smoothstep(t: np.ndarray) -> np.ndarray:
     return t * t * (3.0 - 2.0 * t)
 
 
+def _ankle_world_z(fk: SmplFk, poses: np.ndarray, trans: np.ndarray) -> np.ndarray:
+    """World-frame z of every joint for the whole clip (``trans`` per frame)."""
+    joints = np.stack([fk.joints(frame[1:22], frame[0]) for frame in poses])
+    return joints[:, :, 2] + trans[:, 2][:, None]
+
+
 def build_clip(
     fk: SmplFk,
     frames: int,
@@ -202,6 +208,74 @@ def build_clip(
     ramp = smoothstep((t - (1.0 - hold)) / max(hold, 1e-6)) if hold < 1 else smoothstep(t)
     ramp = smoothstep(t / max(1.0 - hold, 1e-6))
     return target[None, :, :] * ramp[:, None, None]
+
+
+#: Distance (m) over which a foot stops counting as "planted".  Used to blend
+#: between the two feet continuously so the root never jumps when the support
+#: foot changes.
+SUPPORT_BLEND_M = 0.05
+
+#: Deep-squat joint angles, chosen to land inside the envelope the A3 policy was
+#: validated on: the shipped ``043_squat_deep_repeated`` reference reaches a knee
+#: of 131 deg and a hip pitch of -103 deg, so a clip that never bends that far
+#: cannot claim to have tested a squat.
+SQUAT_KNEE_RAD = 2.35
+SQUAT_HIP_RAD = 1.15
+
+
+def support_anchored_root(
+    fk: SmplFk,
+    body: np.ndarray,
+    base_root: np.ndarray,
+    root_height: float,
+    stance_body: np.ndarray,
+    feet: tuple[int, int] = (L_ANKLE, R_ANKLE),
+    floor_blend_m: float = SUPPORT_BLEND_M,
+) -> np.ndarray:
+    """Root translation that keeps the support foot planted on the floor.
+
+    ``trans`` used to be the constant ``[0, 0, root_height]`` for every clip,
+    which *pins the pelvis in space*.  Bending the knees then pushed the feet
+    down through the floor instead of lowering the hips, so no clip could ever
+    express a squat, a jump or a weight shift no matter what the joints did --
+    the whole lower-body half of the acceptance set was measuring a frozen root.
+    (``data/smplx_validation/*.npz`` had ``trans[:, 2]`` constant to the last
+    digit, and so did every converted recording.)
+
+    The root is derived from the pose instead, under the constraint a real body
+    satisfies: the lowest foot stays at the height it has in the natural stance.
+    Lifting a leg therefore drops nothing, bending both knees lowers the pelvis
+    (a squat), and extending the legs raises it (the launch half of a jump).
+    The horizontal part keeps the *support* foot where it was, blended smoothly
+    between the feet so switching support does not step the root.
+    """
+    base_root = np.asarray(base_root, dtype=np.float64).reshape(3)
+    joints = np.stack([fk.joints(frame, base_root) for frame in np.asarray(body, dtype=np.float64)])
+    stance_joints = fk.joints(np.asarray(stance_body, dtype=np.float64), base_root)
+
+    foot_z = joints[:, list(feet), 2]  # (T, 2)
+    stance_foot_z = stance_joints[list(feet), 2]
+
+    # vertical: put the lowest foot back on the stance floor height
+    trans_z = root_height + (stance_foot_z.min() - foot_z.min(axis=1))
+
+    # horizontal: keep the planted foot under the same spot, soft-weighting the
+    # two feet by how close each is to the floor
+    scale = max(float(floor_blend_m), 1e-9)
+    weights = np.exp(-(foot_z - foot_z.min(axis=1, keepdims=True)) / scale)
+    weights = weights / weights.sum(axis=1, keepdims=True)
+    stance_weights = np.exp(-(stance_foot_z - stance_foot_z.min()) / scale)
+    stance_weights = stance_weights / stance_weights.sum()
+    foot_xy = joints[:, list(feet), :2]
+    trans_xy = (
+        (stance_weights[None, :, None] * stance_joints[list(feet), :2][None]).sum(axis=1)
+        - (weights[:, :, None] * foot_xy).sum(axis=1)
+    )
+
+    trans = np.zeros((len(joints), 3), dtype=np.float32)
+    trans[:, :2] = trans_xy
+    trans[:, 2] = trans_z
+    return trans
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,6 +335,12 @@ def main(argv: list[str] | None = None) -> int:
         "raise_left_arm": [(L_SHOULDER, left_arm_up[0], 1.2)],
         "raise_right_arm": [(R_SHOULDER, right_arm_up[0], 1.2)],
         "bend_knees": [(L_KNEE, knee_bend[0], 0.9), (R_KNEE, knee_bend_r[0], 0.9)],
+        "squat_deep": [
+            (L_HIP, hip_raise[0], SQUAT_HIP_RAD),
+            (R_HIP, hip_raise_r[0], SQUAT_HIP_RAD),
+            (L_KNEE, knee_bend[0], SQUAT_KNEE_RAD),
+            (R_KNEE, knee_bend_r[0], SQUAT_KNEE_RAD),
+        ],
         "lift_left_foot": [(L_HIP, hip_raise[0], 0.5), (L_KNEE, knee_bend[0], 0.9)],
         "lift_right_foot": [(R_HIP, hip_raise_r[0], 0.5), (R_KNEE, knee_bend_r[0], 0.9)],
         "twist_torso_left": [(SPINE2, twist[0], 0.5)],
@@ -279,8 +359,7 @@ def main(argv: list[str] | None = None) -> int:
         poses = np.zeros((frames, 55, 3), dtype=np.float32)
         poses[:, 0] = BASE_ROOT_ROTATION.astype(np.float32)
         poses[:, 1:22] = body.astype(np.float32)
-        trans = np.zeros((frames, 3), dtype=np.float32)
-        trans[:, 2] = root_height
+        trans = support_anchored_root(fk, body, BASE_ROOT_ROTATION, root_height, stance)
 
         npz_path = out_dir / f"{name}.npz"
         np.savez(
@@ -301,6 +380,10 @@ def main(argv: list[str] | None = None) -> int:
             "finite": bool(np.isfinite(poses).all()),
             "frames": int(frames),
             "fps": float(args.fps),
+            "root_z_min": float(trans[:, 2].min()),
+            "root_z_max": float(trans[:, 2].max()),
+            "root_z_span_m": float(trans[:, 2].max() - trans[:, 2].min()),
+            "root_xy_range_m": float(np.abs(trans[:, :2] - trans[0, :2]).max()),
             "left_wrist_z_gain": float(world_end[L_WRIST][2] - world_start[L_WRIST][2]),
             "right_wrist_z_gain": float(world_end[R_WRIST][2] - world_start[R_WRIST][2]),
             "left_ankle_forward_gain": float(world_end[L_ANKLE][1] - world_start[L_ANKLE][1]),
@@ -309,6 +392,9 @@ def main(argv: list[str] | None = None) -> int:
             "right_ankle_z_gain": float(world_end[R_ANKLE][2] - world_start[R_ANKLE][2]),
             "left_knee_z_gain": float(world_end[L_KNEE][2] - world_start[L_KNEE][2]),
             "left_ankle_world_z": float(world_start[L_ANKLE][2]),
+            "left_ankle_floor_drift_m": float(
+                np.abs(_ankle_world_z(fk, poses, trans)[:, L_ANKLE] - _ankle_world_z(fk, poses, trans)[0, L_ANKLE]).max()
+            ),
             "torso_twist_deg": float(
                 np.rad2deg(
                     np.arctan2(
@@ -328,6 +414,10 @@ def main(argv: list[str] | None = None) -> int:
             "raise_right_arm": lambda c: c["right_wrist_z_gain"] > 0.2 and abs(c["left_wrist_z_gain"]) < 1e-6,
             "bend_knees": lambda c: c["left_knee_z_gain"] < -0.02
             or c["left_ankle_forward_gain"] < -0.02,
+            # a squat is *defined* by the pelvis going down while the feet stay
+            # planted; without both, the clip tests nothing about squatting
+            "squat_deep": lambda c: c["root_z_span_m"] > 0.25
+            and c["left_ankle_floor_drift_m"] < 0.02,
             "lift_left_foot": lambda c: c["left_ankle_z_gain"] > 0.05 or c["left_ankle_forward_gain"] > 0.1,
             "lift_right_foot": lambda c: c["right_ankle_z_gain"] > 0.05
             or c["right_ankle_forward_gain"] > 0.1,
@@ -365,7 +455,8 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         print(
-            f"{name:20s} frames={frames:4d}  Lwrist_dz={checks['left_wrist_z_gain']:+.3f} "
+            f"{name:20s} frames={frames:4d}  rootz_span={checks['root_z_span_m']:.3f}m "
+            f"Lwrist_dz={checks['left_wrist_z_gain']:+.3f} "
             f"Rwrist_dz={checks['right_wrist_z_gain']:+.3f} "
             f"Lankle_dy={checks['left_ankle_forward_gain']:+.3f} "
             f"twist={checks['torso_twist_deg']:+.1f}deg  ok={checks['expected_behaviour']}"

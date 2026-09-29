@@ -24,6 +24,50 @@ A3_CSV = WS / "logs" / "a3_validation" / "stand" / "stand.csv"
 
 
 # --------------------------------------------------------------------------
+# solver throughput
+# --------------------------------------------------------------------------
+def test_online_session_caps_torch_threads(monkeypatch):
+    """The online SMPL-X forward must not be split across every core.
+
+    Torch's default thread count made the retarget several times slower than a
+    single thread (measured p50 120.9 ms/frame at 14 threads vs 31.1 ms at 1),
+    which is what pinned the live pipeline near 20 Hz.  ``initialize`` applies
+    the cap, and ``A3_TORCH_THREADS`` is the documented escape hatch.
+    """
+    torch = pytest.importorskip("torch")
+    from a3_teleop_bridge.umr.umr_session import (
+        DEFAULT_TORCH_THREADS,
+        configure_torch_threads,
+    )
+
+    assert DEFAULT_TORCH_THREADS == 1
+
+    original = torch.get_num_threads()
+    try:
+        monkeypatch.delenv("A3_TORCH_THREADS", raising=False)
+        assert configure_torch_threads() == 1
+
+        assert configure_torch_threads(3) == 3
+
+        monkeypatch.setenv("A3_TORCH_THREADS", "2")
+        assert configure_torch_threads() == 2
+        assert torch.get_num_threads() == 2
+
+        # "off" means "leave torch's own default alone", not "use zero threads"
+        monkeypatch.setenv("A3_TORCH_THREADS", "off")
+        assert configure_torch_threads() == torch.get_num_threads()
+        assert torch.get_num_threads() > 0
+    finally:
+        torch.set_num_threads(original)
+
+
+def test_run_pico_sim_documents_the_thread_knob():
+    """The knob has to be discoverable from the runbook, not only the source."""
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "A3_TORCH_THREADS" in runbook
+
+
+# --------------------------------------------------------------------------
 # latest-only mailbox
 # --------------------------------------------------------------------------
 def test_latest_slot_keeps_only_the_newest():

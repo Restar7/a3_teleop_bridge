@@ -215,3 +215,98 @@ online 膝角 0.244–0.274 rad(与离线 0.24 一致),solver p50 42.8 ms / p95 
 (与修前 40.4 / 69.9 基本持平),rejected=0。
 
 **没有动**:correspondence、joint limits、joint mapping、部署模型。
+
+---
+
+## M5c — 5060 复验:吞吐瓶颈定位 + 下半身真正纳入验收(10/10)
+
+这一轮解决两个用户直接提出的问题:**solver 只有 ~21 Hz**、**不能抬腿/深蹲/跳跃**。
+
+### 1. 「21 Hz 是硬瓶颈」是错误结论 —— 真凶是 torch 线程数
+
+先用 `cProfile` 查,得到"`solve_frame_body_segment_qp` 占 74%"的结论;据此怀疑 Jacobian
+组装(每帧 912 次 `mj_jac`),写了一个"每个 body 只算一次 `mj_jac`、其余点用
+`jacp(p) = jacp(o) − skew(p−o)·jacr(o)` 推导"的优化 —— 公式本身精确(误差 3.3e-16),
+但 A/B 实测**比原版慢 2 倍**(1.437 ms vs 0.709 ms),因为 `mj_jac` 每个只花 1.7 µs,
+而 numpy 构造 skew 矩阵的开销更大。**这条优化已丢弃。**
+
+改用**手工计时**(cProfile 会把 Python 密集代码放大 1.6 倍,给出 35 ms 的假数字;
+手工计时是 21.3 ms/帧),再做**交错轮转 A/B** 排除机器漂移,定位到单一变量:
+
+| torch intra-op 线程 | p50 / 帧 | 速率 |
+| --- | --- | --- |
+| 1 | **25.8 ms** | **38.8 Hz** |
+| 2 | 47.9 ms | 20.9 Hz |
+| 4 | 75.5 ms | 13.3 Hz |
+| 16(默认) | 133.6 ms | 7.5 Hz |
+
+**SMPL-X LBS 只乘很小的矩阵,OpenMP 屏障同步的开销远超它省下的算术**,所以默认线程数
+是**负优化**。现场实测 19.3 Hz 正对应"有效 4 线程"那一档(sim2sim 也在抢核)。
+
+修复:`UmrRetargetSession.initialize()` 调用 `configure_torch_threads()`,在线路径压到 1;
+**离线批处理不动**,已验收的 npz 因此全部保持有效。`A3_TORCH_THREADS` 可覆盖(`off` = 还原默认)。
+
+- 进程内:`A3_TORCH_THREADS=off` 7.5 Hz → 默认 **38.8 Hz**
+- 真 live 链路(默认端口、假发送端 30 Hz)A/B/复测:
+  `off` 16.0 / 16.5 Hz(p50 59.9 / 58.9 ms)vs `1` **19.5 Hz(p50 46.3 ms)**
+- 单独验证:pipeline 的线程结构本身**不引入开销** —— 交错测量 direct 31.4 ms、
+  thread+feeder 31.3 ms、thread only 31.0 ms,三者相同
+
+### 2. 下半身从未被真正验收:骨盆被写成常量
+
+`make_smplx_validation_motions.py` 里 `trans[:, 2] = root_height` 是**常量**,于是
+`data/smplx_validation/*.npz` 和每条转换后的录制里 `trans[:,2]` 都**同一位数**。
+物理后果:屈膝只能把脚踩穿地面,骨盆纹丝不动 → 深蹲/跳跃/重心转移**在构造上就不可能**。
+
+实测(修复前):`m5_bend_knees` 屈膝 47°,骨盆落差 **9 mm**;`stand`/`raise_*`/`twist_*` 全 **0.000 m**。
+
+修复:`support_anchored_root()` 由姿态反解 root —— 竖直方向让**最低的脚**保持自然站姿的
+地面高度,水平方向让**支撑脚**留在原地(两脚按离地高度软加权,换支撑脚时不瞬移)。
+新增 `m5_squat_deep`,参数对齐官方 `043_squat_deep_repeated`:
+
+| 指标 | 我们 | 官方 043 |
+| --- | --- | --- |
+| 膝最大 | 126.5° | 131.3° |
+| hip_pitch 最小 | −105.7° | −102.6° |
+| 骨盆落差 | **0.523 m** | **0.525 m** |
+
+> 髋角初值 1.85 rad 时输出 −143.2°,正好顶在 A3 `hip_pitch` 下限(−144°)——**是限位在顶
+> 而不是动作在驱动**。降到 1.15 rad 后进入官方包络。
+
+### 3. 验收结果:10/10(数值 + CSV + 全量 MuJoCo)
+
+| 片段 | fall | 机器人 root 高均值 | 倾角 max | 29RMSE | 参考骨盆落差 | 参考膝 max |
+| --- | --- | --- | --- | --- | --- | --- |
+| m5_stand | False | 1.068 | 2.0° | 0.040 | 0.000 | 14.0° |
+| **m5_squat_deep** | **False** | **0.771** | 35.8° | 0.151 | **0.523** | **126.5°** |
+| m5_bend_knees | False | 0.983 | 7.5° | 0.126 | 0.095 | 46.8° |
+| m5_lift_left_foot | False | 1.048 | 11.5° | 0.130 | 0.002 | 46.4° |
+| m5_lift_right_foot | False | 1.046 | 3.2° | 0.105 | 0.005 | 14.0° |
+| m5_raise_left_arm | False | 1.070 | 2.0° | 0.053 | 0.000 | 14.0° |
+| m5_raise_right_arm | False | 1.070 | 1.9° | 0.049 | 0.000 | 14.0° |
+| m5_step_forward_slow | False | 1.063 | 11.2° | 0.093 | 0.001 | 26.8° |
+| m5_twist_torso_left | False | 1.069 | 2.0° | 0.045 | 0.000 | 14.0° |
+| m5_twist_torso_right | False | 1.069 | 2.0° | 0.043 | 0.000 | 14.0° |
+
+**深蹲:机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。策略能蹲,不摔。**
+代价是倾角 35.8°、RMSE 0.151,全集最难的一条 —— 蹲得住,但姿态不如站立干净。
+
+### 4. 跳跃仍未解决,而且不是链路问题
+
+官方 20 条参考的 `root_translateZ`(单位 cm):站立 ≈106,**全集合最高 110.0**
+(`077_reach_overhead_both`,举手),最低 53.8(`043` 深蹲)。**没有任何一条存在飞行阶段**,
+仓库里也没有 jump/hop/leap 动作。即 A3-fast 策略**从未在腾空状态下被验证过**,
+参考格式里也没有接触/腾空标志位。
+
+修好 root 之后参考侧**能表达**跳跃(蹬伸会让骨盆上升),但策略跟踪腾空、落地冲击与
+恢复都没有依据。要做必须先仿真给一条带腾空的参考、观察 `fall`,再谈实机。
+
+### 回归防护
+
+- `tests/test_validate_a3_motion.py::test_all_ten_acceptance_clips_pass`(9 → 10 条)
+- `tests/test_validate_a3_motion.py::test_the_set_contains_a_real_squat`
+  —— 断言深蹲骨盆落差 > 0.35 m、膝 > 110°,且 `stand` 骨盆不 bob(< 0.02 m)
+- `tests/test_online_pipeline.py::test_online_session_caps_torch_threads`
+  —— 断言在线路径默认 1 线程,并验证 `A3_TORCH_THREADS` 三种取值
+- `tests/test_runbook_entrypoints.py::test_generated_motions_derive_the_root_from_the_pose`
+  —— 断言旧的常量赋值 `trans[:, 2] = root_height` 不再存在

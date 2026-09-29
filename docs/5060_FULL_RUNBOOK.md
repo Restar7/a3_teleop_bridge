@@ -264,7 +264,7 @@ sha256sum /home/wusichen/a3_teleop_ws/UMR/smpl/SMPLX_NEUTRAL.pkl
 ```bash
 cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
 
-# ① 合成 9 条 SMPL-X 验收动作
+# ① 合成 10 条 SMPL-X 验收动作(含 squat_deep;§17.8.5 是成批重建的完整版)
 .venv_bridge/bin/python tools/make_smplx_validation_motions.py \
     --out /home/wusichen/a3_teleop_ws/data/smplx_validation --duration 5
 
@@ -358,7 +358,7 @@ $PY_UMR tools/run_live_chain.py --pico \
 终端1 sent 递增                     → PICO/SDK 正常
 T2 状态机 DISCONNECTED→CALIBRATION→TRACKING   → 标定与数据流正常
 T2 rejected=0                        → 没有 NaN/越限
-T2 solver p50 30–60 ms               → 5060 上应该比 Orin 更快
+T2 solver p50 ≤40 ms                 → 压到 1 线程后本机实测 ~26 ms(§17.1)
 T3 fall=false,root z ≈1.07 m         → 策略跟得上
 视觉:抬右臂→右臂抬;转体→腰转          → 关节顺序/镜像正确
 ```
@@ -576,7 +576,7 @@ bash scripts/run_robot_live.sh --a3-host <A3的IP> --duration 1800 --confirm-liv
 | T2 `received 0` | 端口不是 5556;PC Service 不在本机;`ss -ltnp | grep 5556` |
 | 链路报 `pipeline published nothing` | 参考流一个窗口都没发 → 回到 PICO 侧查 |
 | 状态机停在 CALIBRATION | 没有标定文件:用 `--save-calibration` 生成后 `--calibration` 载入 |
-| solver p50 突然 >100 ms | 没插电/没性能模式;后台跑了大任务;或 MuJoCo 与 UMR 抢 CPU(把 MuJoCo 挪到 4090) |
+| solver p50 突然 >100 ms | `A3_TORCH_THREADS` 被设成 off/大值(见 §17.1);没插电/没性能模式;后台跑了大任务;或 MuJoCo 与 UMR 抢 CPU(把 MuJoCo 挪到 4090) |
 | 关节动但部位/方向不对 | 关节顺序或镜像问题:先用录制回放复现,再查 `generated/a3_contract.json` 与 `coordinate_frames.md` |
 | `protoc` 缺失 | `sudo apt-get install -y protobuf-compiler libprotobuf-dev` |
 | `run_pico_sim.sh` 报 `xrobotoolkit_sdk missing` | PICO SDK 没装。**先 `git lfs pull`**(`libPXREARobotSDK.so` 是 LFS 文件),再 `cd $A3WS/sonic_for_a3 && PYTHON_BIN=python3.12 PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple bash install_scripts/install_pico_minimal.sh` |
@@ -898,7 +898,7 @@ raise_left_arm       0.241→(同左)      0.241→1.502   (抬手仍然有效)
 bend_knees 膝        0.000             0.237→0.805
 ```
 
-重新生成后的全套验收 **9/9 PASS**,而且跟踪质量整体变好:stand RMSE 0.0568→**0.0397**、
+重新生成后的全套验收 **10/10 PASS**(§17.8 又加了深蹲),而且跟踪质量整体变好:stand RMSE 0.0568→**0.0397**、
 raise_left_arm 0.0893→**0.0532**、raise_right_arm 0.1028→**0.0492**。
 
 **⚠️ 走不动:发送端原来根本没发位移**
@@ -913,15 +913,71 @@ root_translation = [Δx, Δy, 0.975 + Δz]     # 相对你按 A / 重新开始�
 
 bridge 端本来就优先使用发布的 root,不用改。`--no-root-translation` 可关掉(退回常量站高)。
 
-**⚠️ 反复初始化:输入频率 / solver 吞吐不匹配**
+**✅ 已解决:21 Hz 瓶颈的真凶是 torch 线程数,不是算法**
 
-solver p50 ≈ 46 ms(≈21 Hz),而发送端按 50 Hz 推 → 近半帧被丢、参考短时变旧 → 状态在
-`TRACKING/HOLD` 之间跳。而 **HOLD 帧会被消费者原样转发并清空待处理窗口**
+原来记的"solver 本身 ~21 Hz 是硬瓶颈"**是错的**。用 `cProfile` 一路查下去(先怀疑 Jacobian
+组装、再怀疑 Clarabel QP)全是死路,手工计时 + 逐项 A/B 才定位到真因:
+
+**SMPL-X 的 LBS 只乘很小的矩阵,OpenMP 拆线程的同步开销远大于它省下的算术。**
+同一段 144 帧的片段,只改 `torch.set_num_threads()`:
+
+| torch 线程数 | p50 / 帧 | 速率 |
+|---|---|---|
+| 1 | **25.8 ms** | **38.8 Hz** |
+| 2 | 47.9 ms | 20.9 Hz |
+| 4 | 75.5 ms | 13.3 Hz |
+| 16(默认) | 133.6 ms | 7.5 Hz |
+
+默认 16 线程比单线程**慢 5 倍**。现场实测的 19.3 Hz 正是"4 线程"这一档 —— 因为 sim2sim 进程
+也在抢核,两边都不是满线程。
+
+修法:`UmrRetargetSession.initialize()` 里把在线路径的 torch 线程压到 **1**
+(`umr_session.configure_torch_threads()`);**离线批处理不动**,所以已验收的 npz 全部保持有效。
+
+```bash
+# 默认就是 1,不用做任何事。想改/想关掉:
+A3_TORCH_THREADS=2  ./scripts/run_pico_sim.sh --no-viewer    # 指定线程数
+A3_TORCH_THREADS=off ./scripts/run_pico_sim.sh --no-viewer   # 还原 torch 默认(排查用)
+```
+
+启动日志里会打印实际生效值,现场看这一行就够:
+
+```text
+[umr-online] torch intra-op threads = 1 (A3_TORCH_THREADS overrides)
+```
+
+复核方法(不需要头显,也不需要 sim):
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+for n in off 2 1; do
+  A3_TORCH_THREADS=$n $PY_BRIDGE - <<'PY' 2>&1 | grep -E "torch|p50"
+import sys, time, numpy as np; sys.path.insert(0,"src")
+from pathlib import Path
+from a3_teleop_bridge.pico.recorder import PicoRecording
+from a3_teleop_bridge.umr.backends import UmrOnlineBackend
+import torch
+frames = PicoRecording.load(Path("../recordings/all/m5_bend_knees")).frames
+be = UmrOnlineBackend(); be.initialize()
+print(f"torch={torch.get_num_threads()}")
+lat = []
+for i, f in enumerate(frames[1:145]):
+    t = time.perf_counter(); be.step(f, i + 1); lat.append((time.perf_counter() - t) * 1e3)
+print(f"p50={np.median(lat):.1f} ms -> {1000/np.median(lat):.0f} Hz")
+PY
+done
+```
+
+> 线程数只影响**浮点归约顺序**,不改变算法。1 线程 vs 2 线程逐帧最大差 1.6e-7 rad;
+> 但因为 solver 是 warm-start 迭代,这点扰动会被放大(整段 RMSE ~6e-3 rad),属正常。
+
+**⚠️ 输入频率 / solver 吞吐不匹配(残留抖动)**
+
+改成 1 线程后 solver 从 ~21 Hz 升到 ~38 Hz,30 Hz 的输入不再积压。但若现场仍看到
+`TRACKING/HOLD` 抖动,原因是 **HOLD 帧会被消费者原样转发并清空待处理窗口**
 (`reference_provider.py`:`_pending = None; _current = None`),表现出来就是"参考被重置"。
-
-已做:发送端默认降到 **30 Hz**(`--pico-fps` 可调)、`hold_after_ms` 50→**150 ms**
-(`invalid_after_ms` 仍 250 ms 兜底)。**没解决**:solver 本身 ~21 Hz 是硬瓶颈,
-要彻底消除抖动需要提速 solver 或再降输入频率。
+兜底参数:`hold_after_ms` 50→**150 ms**(`invalid_after_ms` 仍 250 ms)、发送端默认 **30 Hz**
+(`--pico-fps` 可调)。
 
 **没有头显也能测 live 路径**(`--replay` 测不到它)
 
@@ -974,7 +1030,7 @@ PICO 发送端       日志出现 "Stream state: RUNNING" 且 sent 递增
                   是否在本机,再考虑按 A 键(见 §17.1.1)
 T2 状态机         DISCONNECTED → CALIBRATION → TRACKING
 T2 rejected       0
-T2 solver p50     30–60 ms(5060 比 Orin 快;本机实测 36–48 ms)
+T2 solver p50     ≤40 ms(5060 比 Orin 快;压 1 线程后本机实测 ~26 ms)
 T3 fall           false
 T3 root z         ≈1.07 m
 视觉              抬右臂→右臂抬;转体→腰转
@@ -1115,7 +1171,7 @@ ps aux | grep '[m]otion_control'      # 必须无输出
 本机 客户端连接数       ≥1(ss -tnp | grep 5560)
 本机 frames_published   线性增长
 本机 rejected           0
-本机 solver p50         ≤50 ms(>100 ms 就先插电+性能模式,见 §13)
+本机 solver p50         ≤40 ms(>100 ms 先查 §17.1「21 Hz 瓶颈」的线程数,再插电+性能模式,见 §13)
 A3   receive-only       seq 单调、无 rejected
 A3   首次动作           站立保持、无抖动;再做分级动作
 ```
@@ -1130,7 +1186,7 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 | 步骤 | 命令/入口 | 状态 |
 | --- | --- | --- |
 | §0–§5 环境/模型/自检 | 见本文 | ✅ 本机已完成(`check_orin_ready.sh` 16/0) |
-| 仿真 A/B(无头显) | `run_a3_validation_suite.py` / `run_live_chain.py --recording` | ✅ 9/9 与 ACCEPTED(见 `mujoco_validation.md`) |
+| 仿真 A/B(无头显) | `run_a3_validation_suite.py` / `run_live_chain.py --recording` | ✅ 10/10 与 ACCEPTED(见 `mujoco_validation.md`) |
 | **仿真 C(真头显)** | **`bash scripts/run_pico_sim.sh`** | ⏳ 需 PC Service + 头显 |
 | **真机** | **`bash scripts/run_robot_live.sh --confirm-live`** | ⏳ 需 A3 侧部署包 + 悬吊 + 安全员 |
 | 可选:官方 AimSim | §8 | 需 AimDK 的 `aimsim` wheel,未做 |
@@ -1161,7 +1217,8 @@ A3   首次动作           站立保持、无抖动;再做分级动作
       旧版本只会原地踏步(发送端根本没发位移)
 
 [ ] 状态栏不应频繁在 TRACKING/HOLD 之间跳
-      仍会偶发(solver ~21 Hz 是瓶颈),但比修复前(48% 丢帧)明显减少
+      改 torch 线程数后 solver ~38 Hz(见 §17.5),30 Hz 输入不再积压;
+      若仍偶发,按上面那张表查 HOLD 的来源
 ```
 
 ---
@@ -1175,10 +1232,19 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 | 状态机**永远停在 CALIBRATION** | 自动标定只覆盖 `trajectory`/`recording`,`pico` 没有路径 | `retarget_live.py` 用 live 前 ~1.5 s 的帧自动标定 |
 | **走不动**,大步迈→原地踏步 | 发送端算了 `positions` 却丢弃,位移从未离开头显 | 发送端发布 `root_translation`(Z-up + 首帧锚定 + 站立高度) |
 | **手臂向两边平举** | 源动作生成器从 SMPL-X rest 骨架插值,而 rest 骨架手臂是 74–82°(几乎水平);retarget 忠实复现了它 | 生成器加**自然站姿**(手臂 9.5°/12° 下垂),全链重建 |
-| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | 发送端默认 30 Hz + `hold_after_ms` 50→150 ms(未根治,瓶颈在 solver) |
+| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | **torch 线程数压到 1**(`configure_torch_threads`,见 §17.1「21 Hz 瓶颈」):21 Hz→**38.8 Hz**;另加发送端 30 Hz + `hold_after_ms` 50→150 ms |
 | 膝**从来不弯** | 目标函数里膝无约束,foot 点云项主导 | UMR 实现 `solver.joint_map_cost` 膝姿态先验 |
 | 忘了按 A 键时**报 JSONDecodeError** | stats 里的 `None` 不是合法 JSON | `ast.literal_eval` 解析 |
 | SDK 编译在链接阶段失败 | `libPXREARobotSDK.so` 是 git-lfs 指针(133 字节) | `git lfs pull` |
+
+### 17.5.1 第二轮修了什么(2026-09-28,性能与下半身)
+
+| 现象 | 根因 | 修在哪 |
+| --- | --- | --- |
+| solver 只有 **~21 Hz**,近半帧被丢 | **不是算法**:`torch` 默认按核数开 16 个 intra-op 线程,而 SMPL-X LBS 只乘很小的矩阵,屏障同步开销远超收益(16 线程比单线程**慢 5 倍**) | `umr_session.configure_torch_threads()` 压到 1,`A3_TORCH_THREADS` 可覆盖(§17.1) |
+| **不能深蹲 / 抬腿**,骨盆一动不动 | 验收动作生成器把 root 写成**常量** `[0,0,root_height]`,骨盆被钉死;屈膝只能把脚踩穿地面 | `support_anchored_root()`:骨盆由"支撑脚踩地"反解(§17.8) |
+| 深蹲时髋角**顶在限位上** | 源侧髋屈 1.85 rad 过大,retarget 后到 −143°,正好撞 A3 的 −144° 下限 | `SQUAT_HIP_RAD` 1.85→1.15,落到 −105.7°(官方 −102.6°) |
+| **不能跳跃** | **策略侧空白**:官方 20 条参考 root 最高只到 110 cm(站立 106),不存在飞行阶段 | 未修 —— 参考能表达,但策略无腾空验证依据(§17.8.4) |
 
 ---
 
@@ -1335,6 +1401,154 @@ LeftLeg                  0.0388                 15.02  <-- focused
 或者接受"腿部动作幅度远小于参考"这个前提,把验收改成同时看参考和**实际执行**的幅度。
 
 ---
+
+### 17.8 「不能抬腿 / 不能深蹲 / 不能跳」——根因与修复(2026-09-28 第二轮)
+
+**先说结论:深蹲和抬腿是我们自己把骨盆锁死了,已经修好并验收通过。跳跃不一样,它是
+策略侧的空白,不是链路问题。**
+
+#### 17.8.1 根因:验收动作的骨盆是**常量**
+
+`make_smplx_validation_motions.py` 里原来是这样写 root 平移的:
+
+```python
+trans = np.zeros((frames, 3), dtype=np.float32)
+trans[:, 2] = root_height          # 常量!整段一动不动
+```
+
+于是 `data/smplx_validation/*.npz` 和**每一条**转换后的录制里,`trans[:,2]` 都是
+**同一位数**。后果是物理上不可能出现下半身动作:
+
+| 动作 | 需要骨盆做什么 | 骨盆被钉死时发生什么 |
+| --- | --- | --- |
+| 深蹲 | 下沉 ~0.5 m | 屈膝变成**把脚踩穿地面**,骨盆纹丝不动 |
+| 抬腿 | 重心移到支撑脚上 | 没有重心转移,只是腿在空中比划 |
+| 跳跃 | 先下蹲再蹬伸上升 | 高度完全没有自由度 |
+
+实测坐实了这点:修复前 `m5_bend_knees` 的源动作屈膝 47°,**骨盆落差 9 mm**;
+`m5_stand` / `raise_*` / `twist_*` 全是 0.000 m。**整组验收根本没测过下半身。**
+
+#### 17.8.2 修法:骨盆由姿态**推导**出来,而不是给常量
+
+新函数 `support_anchored_root()` 用真实身体必然满足的约束反解 root:
+
+- **竖直**:让**最低的那只脚**保持在自然站姿时的地面高度 →
+  屈膝则骨盆下沉(蹲),蹬伸则上升(跳的起跳段),抬一条腿则不影响骨盆;
+- **水平**:让**支撑脚**留在原地,两只脚按离地高度**软加权**连续过渡
+  (避免换支撑脚时骨盆瞬移)。
+
+验证数据(生成器自检,`rootz_span` 列):
+
+```text
+stand           rootz_span=0.000m   <- 上半身动作不该动骨盆,正确
+raise_*_arm     rootz_span=0.000m   <- 同上
+bend_knees      rootz_span=0.130m
+squat_deep      rootz_span=0.519m   <- 新增
+step_forward    rootz_span=0.000m
+```
+
+同时新增 **`m5_squat_deep`** 片段(验收集 9 → **10** 条),参数对齐官方
+`043_squat_deep_repeated` 的包络:
+
+| 指标 | 我们(修好后) | 官方 043 |
+| --- | --- | --- |
+| 膝最大 | 126.5° | 131.3° |
+| hip_pitch 最小 | −105.7° | −102.6° |
+| **骨盆落差** | **0.523 m** | **0.525 m** |
+
+> 髋角一开始调到 −143.2°,正好顶在 A3 的 `hip_pitch` 下限(−144°)上 —— 说明是**限位在顶**
+> 而不是动作在驱动。`SQUAT_HIP_RAD` 1.85→1.15 后落在 −105.7°,进入官方包络内。
+
+#### 17.8.3 验收结果(10/10)
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+$PY_BRIDGE tools/run_a3_validation_suite.py \
+    --data-dir $A3WS/UMR/output/a3_pico_all \
+    --out-dir $A3WS/logs/a3_validation_all_nomj
+```
+
+```text
+片段                     fall   机器人root高均值   倾角max   29RMSE | 参考骨盆落差  参考膝max
+m5_stand                False      1.068        2.0°    0.040 |   0.000     14.0°
+m5_squat_deep           False      0.771       35.8°    0.151 |   0.523    126.5°   <- 真蹲下去了
+m5_bend_knees           False      0.983        7.5°    0.126 |   0.095     46.8°
+m5_lift_left_foot       False      1.048       11.5°    0.130 |   0.002     46.4°
+...                                                   10/10 clips PASS
+```
+
+**深蹲:机器人 root 高度均值 1.068 → 0.771 m,`fall=false`。策略能蹲,不摔。**
+(代价:倾角 35.8°、跟踪 RMSE 0.151,是全集里最难的一条 —— 蹲得住,但姿态不如站立干净。)
+
+#### 17.8.4 跳跃为什么还是不行
+
+**这不是链路问题,是策略的空白区。** 把官方 20 条参考动作的 root 高度包络拉出来看
+(`root_translateZ`,单位 **cm**):
+
+```bash
+cd /home/wusichen/a3_teleop_ws && python3 - <<'PY'
+import csv, os, numpy as np
+d="sonic_for_a3/a3_data/agibot_a3"
+for f in sorted(os.listdir(d)):
+    rr=list(csv.DictReader(open(os.path.join(d,f))))
+    z=np.array([float(r["root_translateZ"]) for r in rr if r.get("root_translateZ")])
+    print(f"{f[:-4]:34s} z {z.min():7.3f} .. {z.max():7.3f} cm")
+PY
+```
+
+```text
+043_squat_deep_repeated              z  53.835 .. 106.346 cm   <- 唯一的大幅下蹲
+077_reach_overhead_both              z 106.160 .. 109.978 cm   <- 全集合最高点
+047_balance_left_singleleg           z 105.164 .. 106.269 cm
+```
+
+- **站立 ≈ 106 cm,全集合最高只有 110.0 cm —— 只高 3.8 cm,而且是"举手"不是"起跳"。**
+- 官方集合里 **20 条动作没有一条存在飞行阶段**(双脚离地)。全仓库也没有 jump/hop/leap 动作。
+- 也就是说:A3-fast 策略**从未在腾空状态下被验证过**。参考格式里也没有接触/腾空标志位,
+  它只是一个被跟踪的关节+骨盆轨迹。
+
+**所以跳跃现在能做到哪一步、还缺什么:**
+
+| | 状态 |
+| --- | --- |
+| 参考能不能"表达"跳跃 | **能** —— 修好 root 之后,蹬伸会让骨盆自然上升(源侧已可用) |
+| 策略能不能跟踪腾空 | **未知** —— 官方验证包络内没有先例,落地冲击/失稳都没测过 |
+| 硬件能不能跳 | **未知** —— 涉及力矩峰值与关节冲击,需 A3 侧确认 |
+
+要真做跳跃,正确顺序是:**先在仿真里给一条带腾空的参考,观察 `fall` 与落地恢复,再谈实机**。
+不要直接上机器人 —— 包络外的动作没有任何验收依据。
+
+#### 17.8.5 重建整条链的命令(改完生成器后照抄)
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+WS=/home/wusichen/a3_teleop_ws
+
+# ① 10 条 SMPL-X 动作(含 squat_deep)
+$PY_BRIDGE tools/make_smplx_validation_motions.py --out $WS/data/smplx_validation --duration 5
+
+# ② 逐条造 PICO 录制 + 转回 SMPL-X 源
+for f in $WS/data/smplx_validation/*.npz; do
+  c=$(basename "$f" .npz)
+  $PY_BRIDGE tools/make_synthetic_pico_recording.py --clip "$f" --out "$WS/recordings/all/m5_$c"
+  $PY_BRIDGE tools/convert_pico_recording.py --recording "$WS/recordings/all/m5_$c" \
+      --out $WS/data/pico_smplx/all
+done
+
+# ③ 离线重定向(慢,10 条约 5 分钟)
+$PY_BRIDGE tools/run_umr_a3_batch.py --python "$PY_UMR" \
+    --data-dir $WS/data/pico_smplx/all --out-dir $WS/UMR/output/a3_pico_all --force
+
+# ④ 数值 + CSV + MuJoCo 全量验收
+$PY_BRIDGE tools/run_a3_validation_suite.py --data-dir $WS/UMR/output/a3_pico_all \
+    --out-dir $WS/logs/a3_validation_all_nomj
+```
+
+> **⚠️ 顺序不能颠倒**:`*.floating_mjcf.xml` 是**每条片段共享的中间产物**,重跑重定向会
+> 覆盖它。所以①→③要成批做完再跑④;中途插单条重跑会让别的片段的 npz 与 xml 对不上。
+
+---
+
 
 相关文档:`DEPLOY_TARGET_DECISION.md`(选型)· `ORIN_FULL_RUNBOOK.md`(姊妹篇)·
 `SIM_TELEOP.md`(仿真细节与判据)· `A3_ONBOARD.md`(机载与适配节点)·

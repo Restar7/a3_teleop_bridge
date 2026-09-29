@@ -207,6 +207,25 @@ def test_pico_sim_exposes_the_fake_sender_for_desk_testing():
     assert "tools/fake_pico_sender.py" in source
 
 
+def test_generated_motions_derive_the_root_from_the_pose():
+    """A pinned pelvis makes squat/jump/leg-lift untestable by construction.
+
+    ``trans`` used to be ``[0, 0, root_height]`` for every clip -- constant to
+    the last digit in ``data/smplx_validation/*.npz`` and in every converted
+    recording.  Bending the knees therefore pushed the feet through the floor
+    instead of lowering the hips, so the acceptance set could not tell a working
+    squat from a broken one, and "the robot can't squat" was unanswerable.
+    """
+    source = (BRIDGE_ROOT / "tools" / "make_smplx_validation_motions.py").read_text(encoding="utf-8")
+    assert "def support_anchored_root(" in source
+    assert "support_anchored_root(fk, body, BASE_ROOT_ROTATION, root_height, stance)" in source
+    # the old constant assignment must be gone
+    assert "trans[:, 2] = root_height" not in source
+    assert "root_z_span_m" in source
+    # a squat is only a squat if the pelvis descends and the feet stay planted
+    assert "SQUAT_KNEE_RAD" in source and "SQUAT_HIP_RAD" in source
+
+
 def test_generated_motions_start_from_a_natural_stance():
     """The validation set must not be "a human holding their arms out".
 

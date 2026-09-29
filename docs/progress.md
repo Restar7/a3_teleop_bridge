@@ -1057,3 +1057,63 @@ MuJoCo 逐 clip 对比(修前 → 修后 RMSE):
 下蹲峰值 > 0.70 rad。若先验失效,这个测试会红,而不是让验收静默通过。
 
 - **下一阶段**: 无硬件可做部分已全部完成;剩余 PICO 头显 / AimSim / 真机(§7/§8/§11)。
+
+---
+
+## 阶段 M5c — 吞吐瓶颈定位 + 下半身纳入验收(10/10)
+
+用户提出的两个问题:**solver 只有 ~21 Hz**、**不能抬腿/深蹲/跳跃**。
+
+### 过程:两次被自己的假设带偏
+
+1. `cProfile` 显示 `solve_frame_body_segment_qp` 占 74% → 怀疑 Jacobian 组装
+   (每帧 912 次 `mj_jac`)。实现了"每个 body 一次 `mj_jac` + 解析推导其余点"的版本,
+   公式精确(3.3e-16),但 **A/B 实测比原版慢 2 倍**(1.437 vs 0.709 ms):
+   `mj_jac` 一个只要 1.7 µs,numpy 构造 skew 矩阵反而更贵。**已丢弃。**
+2. `cProfile` 给出 35 ms/帧,据此认为"算法是瓶颈"。改用**手工计时**后是 **21.3 ms/帧** ——
+   cProfile 会把 Python 密集代码放大 1.6 倍。**之前的 35 ms 是测量假象。**
+
+### 真因:torch 线程数(单变量,交错 A/B 确认)
+
+| torch 线程 | p50/帧 | 速率 |
+| --- | --- | --- |
+| **1** | **25.8 ms** | **38.8 Hz** |
+| 2 | 47.9 ms | 20.9 Hz |
+| 4 | 75.5 ms | 13.3 Hz |
+| 16(默认) | 133.6 ms | 7.5 Hz |
+
+SMPL-X LBS 的矩阵太小,OpenMP 屏障同步开销远超算术收益。现场 19.3 Hz 对应"有效 4 线程"。
+
+**修**:`umr_session.configure_torch_threads()`,在线路径默认 1 线程;离线批处理**不动**,
+已验收 npz 保持有效。`A3_TORCH_THREADS` 可覆盖。
+live 链路 A/B/复测:`off` 16.0/16.5 Hz → `1` **19.5 Hz**;进程内 7.5 → 38.8 Hz。
+另用交错测量确认 **pipeline 线程结构本身零开销**(31.4 / 31.3 / 31.0 ms)。
+
+### 下半身:骨盆被写成常量
+
+`make_smplx_validation_motions.py` 的 `trans[:, 2] = root_height` 是常量,所以
+`data/smplx_validation/*.npz` 与每条录制的 `trans[:,2]` 都同一位数。屈膝只能把脚踩穿地面,
+骨盆不动 → 深蹲/跳跃/重心转移在构造上不可能。修复前 `m5_bend_knees` 屈膝 47°、骨盆落差
+**9 mm**;`stand`/`raise_*`/`twist_*` 全 **0.000 m**。
+
+**修**:`support_anchored_root()` —— 竖直让最低的脚保持站姿地面高度,水平让支撑脚留在原地
+(软加权,换脚不瞬移)。新增 `m5_squat_deep`,对齐官方 `043`:膝 126.5°(官方 131.3°)、
+hip_pitch −105.7°(官方 −102.6°)、骨盆落差 **0.523 m**(官方 **0.525 m**)。
+髋角初值 1.85 rad 会顶到 A3 下限 −144°,降到 1.15 rad 后进入包络。
+
+**验收 10/10 PASS(数值 + CSV + 全量 MuJoCo)**,深蹲 `fall=false`、
+机器人 root 高度均值 **1.068 → 0.771 m**,倾角 35.8°、RMSE 0.151。
+
+### 跳跃:未解决,且不是链路问题
+
+官方 20 条参考 `root_translateZ`(cm):站立 ≈106,**最高 110.0**(举手动作),最低 53.8。
+**没有一条有飞行阶段**,仓库也无 jump/hop/leap。策略**从未在腾空下被验证**,参考格式也没有
+接触标志位。参考侧现在能表达(蹬伸抬起骨盆),但策略侧无依据 —— 必须先仿真验证落地。
+
+### 新增回归防护
+
+`test_all_ten_acceptance_clips_pass` · `test_the_set_contains_a_real_squat` ·
+`test_online_session_caps_torch_threads` ·
+`test_generated_motions_derive_the_root_from_the_pose`
+
+- **下一阶段**: 跳跃需先仿真验证腾空与落地;其余无硬件可做部分已完成。

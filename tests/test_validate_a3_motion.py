@@ -293,12 +293,12 @@ REAL_CLIP_DIR = Path("/home/wusichen/a3_teleop_ws/UMR/output/a3_pico_all")
 @pytest.mark.skipif(
     not REAL_CLIP_DIR.is_dir(), reason="acceptance npz set not present on this machine"
 )
-def test_all_nine_acceptance_clips_pass():
+def test_all_ten_acceptance_clips_pass():
     from a3_teleop_bridge.umr.offline import load_umr_result
 
     names = list(validator.load_contract().policy_joint_names)
     clips = sorted(REAL_CLIP_DIR.glob("*.npz"))
-    assert len(clips) == 9, [c.name for c in clips]
+    assert len(clips) == 10, [c.name for c in clips]
     failures = []
     for path in clips:
         result = load_umr_result(path)
@@ -314,6 +314,35 @@ def test_all_nine_acceptance_clips_pass():
         if not report["acceptable"]:
             failures.append(f"{path.stem}: {report['problems']}")
     assert not failures, "\n".join(failures)
+
+
+@pytest.mark.skipif(
+    not REAL_CLIP_DIR.is_dir(), reason="acceptance npz set not present on this machine"
+)
+def test_the_set_contains_a_real_squat():
+    """The lower body has to be tested by the acceptance set, not just named in it.
+
+    Every clip used to be generated with a *constant* root translation, which
+    pinned the pelvis: ``m5_bend_knees`` bent the knees 47 deg and the pelvis
+    still moved 9 mm, so nothing in the set could tell a working squat from a
+    broken one.  The generator now derives the root from the pose (support foot
+    planted), and this guards the result against silently regressing.
+    """
+    from a3_teleop_bridge.umr.offline import load_umr_result
+
+    squat = load_umr_result(REAL_CLIP_DIR / "m5_squat_deep_smplx_agibot_a3.npz")
+    root_z = np.asarray(squat.root_pos)[:, 2]
+    knee = np.asarray([squat.joint_value(i, "left_knee_joint") for i in range(squat.n_frames)])
+
+    assert root_z.max() - root_z.min() > 0.35, "the pelvis must actually descend"
+    assert np.rad2deg(knee.max()) > 110.0, "a deep squat needs a deep knee"
+
+    # the reference has to be a squat, not a collapse: the feet stay near the floor
+    assert root_z.min() > 0.3
+
+    standing = load_umr_result(REAL_CLIP_DIR / "m5_stand_smplx_agibot_a3.npz")
+    stand_z = np.asarray(standing.root_pos)[:, 2]
+    assert stand_z.max() - stand_z.min() < 0.02, "standing still must not bob the pelvis"
 
 
 @pytest.mark.skipif(
