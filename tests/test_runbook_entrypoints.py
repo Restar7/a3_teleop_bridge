@@ -113,6 +113,30 @@ def test_stream_stats_parser_survives_python_none():
     assert module.parse_stream_stats("[reference-stream] {'received': 7, 'last_seq': 42}")["last_seq"] == 42
 
 
+def test_sim_does_not_reset_the_robot_when_a_stream_is_driving():
+    """A viewer session was hard-resetting the robot every 5.0 seconds.
+
+    sim2sim advanced the CSV playlist's frame counter and, on reaching
+    reference.num_frames (249 for m5_stand at 50 Hz), wrapped it to 0 and called
+    _reset_to_current_reference -- teleporting the robot back to the standing
+    pose every 5 s for the whole session.  Headless runs never showed it because
+    --batch-once takes an earlier branch, so the acceptance suite was green while
+    a viewer session was unusable.  With a live stream there is no end-of-motion.
+    """
+    sim = (
+        Path("/home/wusichen/a3_teleop_ws/sonic_for_a3/gear_sonic/scripts/sim2sim_a3_mujoco.py")
+    )
+    if not sim.is_file():
+        pytest.skip("sonic_for_a3 checkout not present")
+    source = sim.read_text(encoding="utf-8")
+    assert 'if getattr(self.config, "reference_source", "csv") == "stream":' in source
+    assert "self.current_ref_frame = self.reference.num_frames - 1" in source
+    # and the wrap+reset must remain unreachable for streams: it follows the guard
+    guard = source.index('reference_source", "csv") == "stream"')
+    wrap = source.index("self.current_ref_frame = 0", guard)
+    assert wrap > guard
+
+
 def test_live_chain_exposes_a_viewer_mode():
     """The teleoperation entry point must be able to show the MuJoCo window.
 

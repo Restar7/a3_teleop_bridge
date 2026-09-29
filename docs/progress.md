@@ -1441,3 +1441,62 @@ t=3.6s  参考 +12.6   实际  +9.8   欠  2.8°   <- 踩下去跟得上
 `VERDICT: OK`。(solver 从修前的 46~50 ms 降到现在 15.4 ms。)
 
 回归防护:`test_online_session_wires_both_posture_priors` —— 断言两条路径都接了膝和踝。
+
+### M5j — 两个真机反馈的根因
+
+#### A. 「不断复原」= 仿真每 5 秒把机器人硬重置(已修)
+
+用户:"本来没问题也不断复原,一直复原,稍微动一下就复原"。
+
+桥侧完全干净(180 秒、49.0 Hz、丢 3 帧、**零 HOLD**、`skipped=0`、A 键 0 次)。
+问题在 `sim2sim_a3_mujoco.py:4361`:
+
+```python
+self.current_ref_frame += 1
+if self.current_ref_frame < self.reference.num_frames: return True
+if self.config.batch_once: ...          # 无头模式走这条
+if not self.playlist_mode:
+    self.current_ref_frame = 0
+    self._reset_to_current_reference()  # ← 把 data.qpos[:] 设回参考第 0 帧
+```
+
+`reference.num_frames = 249`(= `m5_stand.csv`),50 Hz 下**每 5.0 秒**把机器人
+`qpos[:] = reference.qpos[0]` —— 硬拉回站立姿态。实测那 180 秒里 `ref` **回绕 39 次**。
+
+**无头模式走 `batch_once` 分支所以从不触发** —— 这就是为什么验收全绿而开窗口没法用。
+
+**修**:`reference_source == "stream"` 时,把 `current_ref_frame` 停在末帧,不 wrap、不 reset
+(实时流没有"动作结束")。验证:`ref` 5→248 后**保持不动,0 次回绕**(修复前 39 次)。
+
+> **我上一轮的误判**:做对照实验时看到 `ref` 每 249 步循环,我判断成"只是播放列表的显示
+> 索引",并在文档里写了"结论作废"。那个判断是错的 —— 它真的在重置机器人。
+
+#### B. 「抬脚尖不显示」= A3 的踝是闭链,而参考只写了从动关节
+
+用户:"抬脚尖,不是抬脚后跟啊,不一样啊,我看你的一直在抬脚后跟"。
+
+三层查下来:
+
+1. **源动作是对的**(实测 SMPL-X 踝→脚尖仰角):
+   站立基准 −24.49° → 勾起相 **+26.50°**(抬起 51°) → 踩下相 −31.89°。两个半程都在。
+2. **`find_axis` 的方向也是对的**:`[-1,0,0]`,+0.55 rad 让 L_FOOT(脚尖)上升 +0.064 m。
+3. **问题在 A3 侧**:这个踝是**闭链四连杆,由两个电机驱动**:
+
+   | 关节 | 性质 | 参考里的值 |
+   | --- | --- | --- |
+   | `ankle_motor_up_joint` | **驱动电机** | **0.00°(全程不动)** |
+   | `ankle_motor_down_joint` | **驱动电机** | **0.00°(全程不动)** |
+   | `ankle_pitch_joint` | **闭链从动关节** | 命令到 −44.2° |
+
+   **11 个片段里,两个踝电机的行程全部是 0.0°** —— 一次都没动过。而 `ankle_pitch` 被
+   命令到 −44.2°,这个构型连杆**根本到不了**。
+
+**为什么我的测量之前没发现**:直接设 `qpos[ankle_pitch]` 再 `mj_forward` 得到的是
+**不满足闭链约束的假姿态**(模型有 neq=6),看起来"脚跟着转",实际物理里不成立。
+
+**所以上一轮"踝先验修好了"这个结论只对了一半**:它确实让 `ankle_pitch` 不再停在限位上
+(数值上饱和解除了),但**它约束的是一个从动关节,脚在物理上依然不动**。先验应该作用在
+**电机**上,或者把期望的踝角通过闭链运动学换算成电机指令。
+
+**下一步**(独立一轮):查 `liba3_ankle_waist_solver` 如何把参考的 ankle pitch 换算成
+`ankle_motor_up/down`;若它做不到,retarget 就必须直接驱动电机而不是 `ankle_pitch`。
