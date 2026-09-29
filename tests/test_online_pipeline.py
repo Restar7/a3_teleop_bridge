@@ -61,6 +61,26 @@ def test_online_session_caps_torch_threads(monkeypatch):
         torch.set_num_threads(original)
 
 
+def test_warmup_solve_is_genuinely_throwaway():
+    """The CUDA warm-up used to leak into both the dump and the warm start.
+
+    Solving the blank frame left ``_previous_qpos`` holding a solution for a frame
+    that is not the operator (identity quaternion, root at the origin), so the
+    first *real* frame was warm-started from it -- cost 2.69 on frame 1, back to
+    0.21 only by frame 6 -- and the dump grew a leading placeholder entry.  The
+    solvers must stay warm; the state and the dump must not.
+    """
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "umr" / "umr_session.py").read_text(
+        encoding="utf-8"
+    )
+    start = source.index("CUDA warm-up")
+    block = source[start : start + 1800]
+    assert "self.frame_dump = None" in block, "the warm-up must not be dumped"
+    assert "self.frame_dump = _saved_dump" in block, "the dump must be restored"
+    assert "self._previous_qpos = None" in block, "the warm start must be cleared"
+    assert "self._previous_qpos2 = None" in block
+
+
 def test_live_dump_records_the_reference_orientation():
     """Balance lives in the anchor rotation, so the dump has to carry it.
 

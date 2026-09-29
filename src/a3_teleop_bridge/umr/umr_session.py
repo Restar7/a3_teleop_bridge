@@ -361,14 +361,28 @@ class UmrRetargetSession:
         self.caches = _prepare_caches(module, args, self.model, self.faces)
         self.timings["caches_ms"] = (time.perf_counter() - stage) * 1e3
 
-        # CUDA warm-up: one throwaway solve so the first real frame is not slow
+        # CUDA warm-up: one throwaway solve so the first real frame is not slow.
+        #
+        # It has to be genuinely throwaway.  Solving the blank frame populated two
+        # things it should not have: the frame dump grew an entry with the identity
+        # quaternion and a root at the origin, and ``_previous_qpos`` was left
+        # holding that solution, so the *first real frame* was warm-started from a
+        # frame that is not the operator -- visible as cost 2.69 on frame 1 falling
+        # to 0.21 only by frame 6.  The dump is suppressed and the warm start
+        # cleared here; the solvers stay warm, which was the point of the exercise.
         stage = time.perf_counter()
         warm = _blank_frame(self)
+        _saved_dump = self.frame_dump
+        self.frame_dump = None
         try:
             self.solve_frame(warm, first=True)
         except Exception as exc:  # pragma: no cover - reported, not fatal
             if self.verbose:
                 print(f"[umr-online] warm-up solve raised: {exc}")
+        finally:
+            self.frame_dump = _saved_dump
+            self._previous_qpos = None
+            self._previous_qpos2 = None
         self.timings["warmup_ms"] = (time.perf_counter() - stage) * 1e3
 
         self.prepared = True
