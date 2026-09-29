@@ -283,14 +283,13 @@ BEND_ANKLE_RAD = 0.25
 #: toe spring (+-13.2 deg), so the whole "lift the toe, press the pedal" gesture
 #: lives in the ankle.  The official motions reach -38.6 deg at most, so the
 #: target here is sized to stay inside that rather than on the stop.
-# The foot stays ON the pedal.  An earlier version lifted the leg hard
-# (hip 0.70 / knee 1.10) and swept the ankle in mid-air, which is not what
-# pressing a pedal is: the policy tracks the ankle at 107% on the official
-# planted 055_lunge_front_alternating (reference -38.4 -> state -41.0) but
-# only reached 13.7 of the 44.2 deg asked while the leg was airborne.  Keep
-# the foot low and let the ankle do the work.
-PEDAL_LIFT_HIP_RAD = 0.22
-PEDAL_LIFT_KNEE_RAD = 0.30
+# Coupled with the hip and knee, because that is the only configuration the
+# policy has seen.  Every official reference moves the ankle together with a
+# comparable hip/knee swing (hip:ankle 1.29 on 055_lunge_front, 1.80 on
+# 073_squat_leg_sweep, 2.56 on 043_squat_deep).  Sweeping the ankle almost
+# alone (0.08) tracked 16%, the coupled version 41%.
+PEDAL_LIFT_HIP_RAD = 0.70
+PEDAL_LIFT_KNEE_RAD = 1.10
 PEDAL_TOE_RAD = 0.55
 
 
