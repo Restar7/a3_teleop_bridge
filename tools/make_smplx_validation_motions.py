@@ -283,8 +283,14 @@ BEND_ANKLE_RAD = 0.25
 #: toe spring (+-13.2 deg), so the whole "lift the toe, press the pedal" gesture
 #: lives in the ankle.  The official motions reach -38.6 deg at most, so the
 #: target here is sized to stay inside that rather than on the stop.
-PEDAL_LIFT_HIP_RAD = 0.70
-PEDAL_LIFT_KNEE_RAD = 1.10
+# The foot stays ON the pedal.  An earlier version lifted the leg hard
+# (hip 0.70 / knee 1.10) and swept the ankle in mid-air, which is not what
+# pressing a pedal is: the policy tracks the ankle at 107% on the official
+# planted 055_lunge_front_alternating (reference -38.4 -> state -41.0) but
+# only reached 13.7 of the 44.2 deg asked while the leg was airborne.  Keep
+# the foot low and let the ankle do the work.
+PEDAL_LIFT_HIP_RAD = 0.22
+PEDAL_LIFT_KNEE_RAD = 0.30
 PEDAL_TOE_RAD = 0.55
 
 
@@ -435,27 +441,34 @@ def main(argv: list[str] | None = None) -> int:
     #: ramps neutral -> one target, so this clip is built from phases instead.
     sequences: dict[str, list[tuple[float, list[tuple[int, np.ndarray, float]]]]] = {
         "press_pedal": [
-            # neutral -> foot clear of the floor with the toes cocked up
-            (0.00, []),
-            (0.28, [
+            # Hold-and-move, not a continuous sweep.  Every official reference
+            # keeps the ankle almost still (median 1-3 deg/s) and moves it in
+            # brief bursts (peaks 46-89 deg/s), while a smoothstep ramp holds
+            # ~22 deg/s for the whole clip -- the policy tracks the former at
+            # 107% (055_lunge_front) and only 12% of the latter.  So the
+            # transitions here are short and the poses in between are held.
+            (0.00, []),                       # neutral
+            (0.10, [                          # cock the toes up, briefly
                 (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
                 (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
                 (L_ANKLE, toe_up[0], +PEDAL_TOE_RAD),
             ]),
-            # hold the cocked pose so the reference has something to track
-            (0.45, [
+            (0.44, [                          # HOLD the cocked pose
                 (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
                 (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
                 (L_ANKLE, toe_up[0], +PEDAL_TOE_RAD),
             ]),
-            # drive the ankle down past neutral: this is the press
-            (0.72, [
+            (0.56, [                          # drive down: the press
                 (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
                 (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
                 (L_ANKLE, toe_up[0], -PEDAL_TOE_RAD),
             ]),
-            # release and set the foot back down
-            (1.00, []),
+            (0.88, [                          # HOLD the pressed pose
+                (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
+                (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
+                (L_ANKLE, toe_up[0], -PEDAL_TOE_RAD),
+            ]),
+            (1.00, []),                       # release
         ],
     }
 
@@ -556,8 +569,9 @@ def main(argv: list[str] | None = None) -> int:
             and c["left_ankle_floor_drift_m"] < 0.02,
             # a pedal press only counts if the foot leaves the floor AND the ankle
             # both cocks up and drives down -- one direction alone is not a press
-            "press_pedal": lambda c: c["left_ankle_z_max_gain"] > 0.05
-            and c["left_ankle_pitch_span_rad"] > 0.5,
+            # a pedal press keeps the foot on the pedal, so the gesture is the
+            # ankle sweep -- not how high the foot leaves the floor
+            "press_pedal": lambda c: c["left_ankle_pitch_span_rad"] > 0.5,
             "lift_left_foot": lambda c: c["left_ankle_z_gain"] > 0.05 or c["left_ankle_forward_gain"] > 0.1,
             "lift_right_foot": lambda c: c["right_ankle_z_gain"] > 0.05
             or c["right_ankle_forward_gain"] > 0.1,
