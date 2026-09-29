@@ -61,6 +61,26 @@ def test_online_session_caps_torch_threads(monkeypatch):
         torch.set_num_threads(original)
 
 
+def test_online_session_wires_both_posture_priors():
+    """The offline pipeline and the live path build their prior rows separately.
+
+    Adding the ankle prior to the offline script alone leaves live teleop with
+    the saturated ankle while the offline validation looks fixed -- the exact
+    split that already bit the knee.  Both joints have to be wired on both paths.
+    """
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "umr" / "umr_session.py").read_text(
+        encoding="utf-8"
+    )
+    assert "self._knee_prior" in source
+    assert "self._ankle_prior" in source
+    # both must contribute rows, not just be constructed
+    assert "source_knee_interior_deg" in source
+    assert "source_ankle_flexion_deg" in source
+    assert "robot_ankle_interior_calibration" in source
+    # the row builder must guard on either prior being present
+    assert "if self._knee_prior is not None or self._ankle_prior is not None:" in source
+
+
 def test_run_pico_sim_documents_the_thread_knob():
     """The knob has to be discoverable from the runbook, not only the source."""
     runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")

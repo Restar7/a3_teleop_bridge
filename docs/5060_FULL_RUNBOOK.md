@@ -1713,6 +1713,21 @@ PY
 
 `m5_press_pedal` 现在**穿过零点**:"勾起(−44.2°) → 踩下(+12.6°)"两个半程都在。
 
+##### 在线路径也要接(否则 live 还是老样子)
+
+离线脚本和 live 路径**各自造 prior rows** —— 只改离线,会出现"离线验收看着修好了、
+现场遥操踝还是卡住"。膝盖当初就踩过这个坑,踝又踩了一次。
+
+`umr_session.py` 现在两个关节都接:knee + ankle,行合并成一份 `_joint_prior_rows`。
+实测(假发送端跑 `m5_press_pedal`,真实包路径):
+
+```text
+[umr-online] ankle posture prior on (interior=121.43+57.30*ankle deg)
+在线路径 左踝pitch [-44.0, +13.0]  行程 56.9°  贴-52: 0/919  穿过零点: 是
+```
+
+与离线一致。回归防护:`test_online_session_wires_both_posture_priors`。
+
 ##### ⚠️ 但策略只跟上了"踩下"那半程
 
 拿这条参考跑仿真(`fall=false`),逐帧对比左踝:

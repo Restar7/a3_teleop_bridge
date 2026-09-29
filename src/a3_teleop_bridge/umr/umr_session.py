@@ -258,6 +258,52 @@ class UmrRetargetSession:
             except Exception as exc:  # pragma: no cover - defensive
                 self._knee_prior = None
                 print(f"[umr-online][WARN] knee posture prior disabled: {exc}")
+        # The ankle needs the same treatment as the knee: without it the surface
+        # objective parks the ankle on whichever stop is nearest (measured: 43-75%
+        # of every clip that bends the left leg, against official references that
+        # never go below -38.6 deg), which made a pedal press inexpressible.
+        # The offline pipeline grew this in the same commit; the online path
+        # builds its own rows, so it has to grow it too or live teleop keeps the
+        # saturated ankle while the offline validation looks fixed.
+        self._ankle_prior = None
+        if self._knee_prior is not None:
+            try:
+                import mujoco as _mj
+
+                ankle_adrs, ankle_dofs, ankle_ranges = [], [], []
+                for _side in ("left", "right"):
+                    _jid = _mj.mj_name2id(
+                        self.model, _mj.mjtObj.mjOBJ_JOINT, f"{_side}_ankle_pitch_joint"
+                    )
+                    if _jid < 0:
+                        raise ValueError(f"{_side}_ankle_pitch_joint not in the model")
+                    ankle_adrs.append(int(self.model.jnt_qposadr[_jid]))
+                    ankle_dofs.append(int(self.model.jnt_dofadr[_jid]))
+                    ankle_ranges.append(self.model.jnt_range[_jid])
+                _acalib = module.robot_ankle_interior_calibration(
+                    self.model,
+                    self.data,
+                    "left_knee_Link",
+                    "left_ankle_roll_Link",
+                    "left_foot_forefoot_Link",
+                    ankle_adrs[0],
+                )
+                if _acalib is not None:
+                    self._ankle_prior = {
+                        "cost": _prior_cost,
+                        "calib": _acalib,
+                        "adrs": ankle_adrs,
+                        "dofs": ankle_dofs,
+                        "ranges": ankle_ranges,
+                    }
+                    if self.verbose:
+                        print(
+                            f"[umr-online] ankle posture prior on "
+                            f"(interior={_acalib[0]:.2f}+{_acalib[1]:.2f}*ankle deg)"
+                        )
+            except Exception as exc:  # pragma: no cover - defensive
+                self._ankle_prior = None
+                print(f"[umr-online][WARN] ankle posture prior disabled: {exc}")
         # NOTE: filled in below, *after* the slot part labels exist. The offline
         # pipeline samples a bounded number of slots per body segment
         # (``sample_segment_slots``); feeding all 4096 correspondence slots to
@@ -358,15 +404,29 @@ class UmrRetargetSession:
             else int(args.iters)
         )
         solve_started = time.perf_counter()
-        if self._knee_prior is not None:
-            args._joint_prior_cost = float(self._knee_prior["cost"])
-            _intercept, _slope = self._knee_prior["calib"]
-            _interior = module.source_knee_interior_deg(joints, self.source_joint_names)
+        if self._knee_prior is not None or self._ankle_prior is not None:
+            args._joint_prior_cost = float(
+                (self._knee_prior or self._ankle_prior)["cost"]
+            )
             _rows = []
-            for _i, (_adr, _dof) in enumerate(zip(self._knee_prior["adrs"], self._knee_prior["dofs"])):
-                _lo, _hi = self._knee_prior["ranges"][_i]
-                _target = (float(_interior[_i]) - _intercept) / _slope
-                _rows.append((_adr, _dof, float(np.clip(_target, _lo, _hi))))
+            if self._knee_prior is not None:
+                _intercept, _slope = self._knee_prior["calib"]
+                _interior = module.source_knee_interior_deg(joints, self.source_joint_names)
+                for _i, (_adr, _dof) in enumerate(
+                    zip(self._knee_prior["adrs"], self._knee_prior["dofs"])
+                ):
+                    _lo, _hi = self._knee_prior["ranges"][_i]
+                    _target = (float(_interior[_i]) - _intercept) / _slope
+                    _rows.append((_adr, _dof, float(np.clip(_target, _lo, _hi))))
+            if self._ankle_prior is not None:
+                _aintercept, _aslope = self._ankle_prior["calib"]
+                _aflex = module.source_ankle_flexion_deg(joints, self.source_joint_names)
+                for _i, (_adr, _dof) in enumerate(
+                    zip(self._ankle_prior["adrs"], self._ankle_prior["dofs"])
+                ):
+                    _lo, _hi = self._ankle_prior["ranges"][_i]
+                    _target = (float(_aflex[_i]) - _aintercept) / _aslope
+                    _rows.append((_adr, _dof, float(np.clip(_target, _lo, _hi))))
             args._joint_prior_rows = _rows
         q_opt, cost = module.solve_frame_body_segment_qp(
             self.model,

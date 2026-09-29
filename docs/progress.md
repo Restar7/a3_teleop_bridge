@@ -1424,3 +1424,20 @@ t=3.6s  参考 +12.6   实际  +9.8   欠  2.8°   <- 踩下去跟得上
 > 那次真机运行 `skipped=0`、A 键 0 次,anchor 从未重置。用带 0.351 m 水平位移的录制走
 > 真实包路径测过:参考出来 **0.427 m**,位移是通的(甚至放大 1.5 倍)。
 > 新增的 `src_root_x/y` dump 字段下次真机跑就能直接看到源头位移。
+
+#### 5. 在线路径的踝先验(补漏)
+
+离线脚本和 live 路径**各自造 prior rows**。只改离线 → "离线验收看着修好了、现场遥操踝还是
+卡住"。**膝盖当初踩过这个坑,踝又踩了一次。**
+
+`umr_session.py` 补上 `self._ankle_prior`,与膝的行合并。实测(假发送端 + 真实包路径):
+
+```text
+[umr-online] ankle posture prior on (interior=121.43+57.30*ankle deg)
+在线路径 左踝pitch [-44.0, +13.0]  行程 56.9°  贴-52: 0/919  穿过零点: 是
+```
+
+**端到端复跑(整链)**:`ACCEPTED`、`fall=False`、`solver p50 = 15.4 ms`、`e2e p95 = 19.3 ms`、
+`VERDICT: OK`。(solver 从修前的 46~50 ms 降到现在 15.4 ms。)
+
+回归防护:`test_online_session_wires_both_posture_priors` —— 断言两条路径都接了膝和踝。
