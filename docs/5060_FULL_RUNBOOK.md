@@ -973,11 +973,12 @@ done
 
 **⚠️ 输入频率 / solver 吞吐不匹配(残留抖动)**
 
-改成 1 线程后 solver 从 ~21 Hz 升到 ~38 Hz,30 Hz 的输入不再积压。但若现场仍看到
+改完之后 solver 从 ~21 Hz 升到 **62 Hz 上限**,50 Hz 的输入也能全额吃下(§17.10)。但若现场仍看到
 `TRACKING/HOLD` 抖动,原因是 **HOLD 帧会被消费者原样转发并清空待处理窗口**
 (`reference_provider.py`:`_pending = None; _current = None`),表现出来就是"参考被重置"。
-兜底参数:`hold_after_ms` 50→**150 ms**(`invalid_after_ms` 仍 250 ms)、发送端默认 **30 Hz**
-(`--pico-fps` 可调)。
+兜底参数:`hold_after_ms` **150 ms**(`invalid_after_ms` 仍 250 ms)。这个值**故意不往回收**:
+它管的是"头显/网络真卡住了"这种事故,不是频率不匹配(HOLD 帧会清空消费者待处理窗口,
+阈值调紧反而会让"参考被重置"更频繁)。发送端默认已回到 **50 Hz**(`--pico-fps` 可调)。
 
 **没有头显也能测 live 路径**(`--replay` 测不到它)
 
@@ -1219,7 +1220,7 @@ A3   首次动作           站立保持、无抖动;再做分级动作
       旧版本只会原地踏步(发送端根本没发位移)
 
 [ ] 状态栏不应频繁在 TRACKING/HOLD 之间跳
-      改 torch 线程数后 solver ~38 Hz(见 §17.5),30 Hz 输入不再积压;
+      solver 上限 ~62 Hz(见 §17.10),50 Hz 输入不再积压;
       若仍偶发,按上面那张表查 HOLD 的来源
 ```
 
@@ -1234,7 +1235,7 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 | 状态机**永远停在 CALIBRATION** | 自动标定只覆盖 `trajectory`/`recording`,`pico` 没有路径 | `retarget_live.py` 用 live 前 ~1.5 s 的帧自动标定 |
 | **走不动**,大步迈→原地踏步 | 发送端算了 `positions` 却丢弃,位移从未离开头显 | 发送端发布 `root_translation`(Z-up + 首帧锚定 + 站立高度) |
 | **手臂向两边平举** | 源动作生成器从 SMPL-X rest 骨架插值,而 rest 骨架手臂是 74–82°(几乎水平);retarget 忠实复现了它 | 生成器加**自然站姿**(手臂 9.5°/12° 下垂),全链重建 |
-| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | **torch 线程数压到 1**(`configure_torch_threads`,见 §17.1「21 Hz 瓶颈」):21 Hz→**38.8 Hz**;另加发送端 30 Hz + `hold_after_ms` 50→150 ms |
+| **反复初始化**(参考被重置) | solver p50 ~46 ms(≈21 Hz) vs 50 Hz 输入 → 近半帧被丢 → `TRACKING/HOLD` 抖动,而 HOLD 帧会清空消费者的待处理窗口 | **线程两层修复**(§17.1 + §17.9):21 Hz→**62 Hz 上限**,50 Hz 输入 0 丢帧;`hold_after_ms` 50→150 ms |
 | 膝**从来不弯** | 目标函数里膝无约束,foot 点云项主导 | UMR 实现 `solver.joint_map_cost` 膝姿态先验 |
 | 忘了按 A 键时**报 JSONDecodeError** | stats 里的 `None` 不是合法 JSON | `ast.literal_eval` 解析 |
 | SDK 编译在链接阶段失败 | `libPXREARobotSDK.so` 是 git-lfs 指针(133 字节) | `git lfs pull` |
@@ -1607,7 +1608,7 @@ A3_OMP_THREADS=off bash scripts/run_pico_sim.sh      # 还原系统默认(排查
 | --- | --- | --- |
 | **`OMP_NUM_THREADS=1`(已内置)** | CPU **1453%→50%**,26.5→30.0 Hz | **已默认开启**,不用管 |
 | **关掉桌面程序**(chrome / 微信 / VSCode / gnome 扩展) | 负载从 ~22 降到 ~6(16 核),solver 45→26 ms | **收益最大的一条**,尤其真机联调时 |
-| `run_pico_sim.sh --no-viewer` | bridge CPU 54.4%→70.2%(±16% 单核) | **影响很小**:两次都跑在 30 Hz 且丢 0 帧,开窗口是为了看画面,不是瓶颈 |
+| `run_pico_sim.sh --no-viewer` | bridge CPU 54.4%→70.2%(±16% 单核) | **影响很小**:两次都丢 0 帧,开窗口是为了看画面,不是瓶颈 |
 | `A3_TORCH_THREADS` | 已默认 1,是**第二道**保险 | 不用动 |
 | **`--dump-frames` 不用关** | **7.4 µs/帧 = 0.22 ms/s** | **纯属噪音,关它没有意义** |
 | `--policy-steps` / `--duration` | 不影响速度,只影响跑多久 | 随意 |
@@ -1635,6 +1636,64 @@ top -bn1 -p $BPID | tail -2                            # 期望 ~50%,不是 ~140
 | 线程 ~5、CPU ~50% | 正常 |
 | 线程 ~35、CPU >500% | `A3_OMP_THREADS` 被设成了 `off`,或者环境里已有别的 `OMP_NUM_THREADS` |
 | 线程 ~5、CPU 但仍 >300% | 另有原因,先看 `load average` 是不是被桌面程序顶满了 |
+
+---
+
+### 17.10 频率:当初为什么降到 30 Hz,现在能不能回 50 Hz
+
+**能,而且已经改回 50 Hz 了。但先把三个"频率"分清楚,不然会得出错误结论:**
+
+| 环节 | 是什么 | 现状 |
+| --- | --- | --- |
+| **① 源** PICO → 发送端 → ZMQ | 头显采样率,发送端按 `--target_fps` 节流 | `run_pico_sim.sh --pico-fps`(**已改回 50**) |
+| **② 求解** 在线 UMR | 每个源帧解一次 | **p50 16 ms / p99 18 ms → 上限 ~62 Hz** |
+| **③ 发布** → A3_REFERENCE_V1 | **等于 ②**,不是固定 50 | = 求解频率 |
+
+> ⚠️ **③ 最容易误解**:`configs/network.yaml` 里写着 `reference_publish: 50`,但
+> **predictor 线程是被求解帧驱动的**(`state_slot.get()`),并没有自己的 50 Hz 定时器。
+> 实测也印证:`frames_solved: 911, frames_published: 910` —— **发布频率就是求解频率**。
+> 真正按 50 Hz 跑的是**机器人侧的策略**,它把收到的 10 帧窗口(`dt=0.02`,0.18 s 视界)
+> **插值**到自己的 50 Hz(`[reference-stream] interpolated=248`)。
+>
+> 所以**把源端提到 50 Hz 并不会改变机器人收到的命令频率** —— 它改变的是"被求解的那个
+> 采样点有多新、多细"。
+
+#### 17.10.1 实测定下来的结论
+
+两层线程修复之后,同一条链路扫输入频率(假发送端 + 真 sim2sim):
+
+| 输入 | 求解速率 | 丢弃 | bridge CPU | fall |
+| --- | --- | --- | --- | --- |
+| 30 Hz | 30.0 Hz | 1(0%) | 56% 单核 | False |
+| **50 Hz** | **50.0 Hz** | **1(0%)** | 87% 单核 | False |
+| 60 Hz | 59.1 Hz | 30(1%) | 102% 单核 | False |
+
+纯求解能力的预算表(进程内,6 核绑定):
+
+```text
+单帧 p50=16.0  p90=16.8  p99=18.0 ms   ->  上限 62.6 Hz
+目标 30 Hz(33.3 ms 预算): 100.0% 的帧能按时完成
+目标 40 Hz(25.0 ms 预算): 100.0% 的帧能按时完成
+目标 50 Hz(20.0 ms 预算): 100.0% 的帧能按时完成
+目标 60 Hz(16.7 ms 预算):  87.8% 的帧能按时完成
+```
+
+**50 Hz 全额吃得下、一帧不丢;60 Hz 会掉 1%,是当前上限。** 默认值已从 30 改回 **50**:
+
+```bash
+bash scripts/run_pico_sim.sh               # 源端 50 Hz(新默认)
+bash scripts/run_pico_sim.sh --pico-fps 60 # 想压上限可以试,会掉 ~1%
+bash scripts/run_pico_sim.sh --pico-fps 30 # 机器很忙时退回
+```
+
+#### 17.10.2 什么时候该退回去
+
+50 Hz 是"源端采样更细、延迟更低",**不是**"机器人动作更快"。若现场出现下面情况,
+先把 `--pico-fps` 降回 30,再看 §17.9 的 CPU 表:
+
+- `solver p50` 持续 >20 ms(50 Hz 的每帧预算就是 20 ms)
+- `pipeline_stats.json` 里 `frames_in - frames_solved` 明显不为 0(开始丢帧)
+- 桌面程序把 16 核顶满(先关它们,见 §17.9.2)
 
 ---
 

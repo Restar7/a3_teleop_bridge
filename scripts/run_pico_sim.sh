@@ -6,7 +6,7 @@
 #   bash scripts/run_pico_sim.sh --replay DIR    # no headset: drive from a recording
 #   bash scripts/run_pico_sim.sh --no-viewer     # headless (CI / no display)
 #   bash scripts/run_pico_sim.sh --skip-pico-probe   # do not pre-check headset streaming
-#   bash scripts/run_pico_sim.sh --pico-fps 30       # match the solver rate (default 30)
+#   bash scripts/run_pico_sim.sh --pico-fps 30       # override the source rate (default 50)
 #   bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
 #
 # This starts BOTH halves and tears them down together:
@@ -35,7 +35,10 @@ DURATION=150
 POLICY_STEPS=3000
 PORT=5560
 PICO_PORT=5556
-PICO_FPS=30
+# 50 Hz: the online solve now runs at p50 ~16 ms (p99 18 ms), i.e. a ~62 Hz
+# ceiling, so 50 Hz fits inside the 20 ms budget with no frame drops.  It was
+# lowered to 30 only because the solver could not keep up (see runbook 17.9).
+PICO_FPS=50
 REPLAY=""
 CHECK_ONLY=0
 OUT_DIR=""

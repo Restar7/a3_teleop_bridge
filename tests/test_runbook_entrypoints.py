@@ -141,6 +141,28 @@ def test_pico_sim_defaults_to_the_viewer():
     assert "Space pause" in source, "controls should be echoed to the operator"
 
 
+def test_pico_sim_source_rate_matches_what_the_solver_can_take():
+    """The source rate was cut to 30 Hz only because the solver could not keep up.
+
+    With the thread pools fixed the solve runs at p50 16 ms / p99 18 ms, a ~62 Hz
+    ceiling, and the live chain measured 50 Hz in / 50 Hz solved with a single
+    dropped frame over 34 s -- so the cap belongs back at the sender's own
+    default.  A 30 Hz default would now be leaving fidelity on the floor; a 60 Hz
+    default would drop ~1% of frames.
+    """
+    source = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert "PICO_FPS=50" in source, "the source rate should match the solver's headroom"
+    assert "PICO_FPS=30" not in source
+    # it has to stay reachable from the command line for slower machines
+    assert "--pico-fps" in source
+    assert "--target_fps" in source, "the rate must actually reach the sender"
+
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "17.10" in runbook
+    # the runbook has to say that publishing is driven by the solve, not a 50 Hz timer
+    assert "发布频率就是求解频率" in runbook
+
+
 def test_bridge_process_pins_the_math_runtimes_to_one_thread():
     """``torch.set_num_threads`` does not shrink a pool that already exists.
 
