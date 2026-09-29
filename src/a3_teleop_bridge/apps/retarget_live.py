@@ -253,7 +253,8 @@ def main(argv: list[str] | None = None) -> int:
                             print(f"[live] auto-calibration retry {state['tries']}: {exc}")
             return frame
 
-    print(f"[live] source={args.source} backend={args.backend} duration={args.duration:g}s "
+    print(f"[live] source={args.source} backend={args.backend} "
+          f"duration={'unlimited' if float(args.duration) <= 0.0 else f'{args.duration:g}s'} "
           f"playback={args.playback_hz:g} Hz publish={bool(publisher)}")
     def write_stats() -> None:
         if not args.stats:
@@ -278,7 +279,11 @@ def main(argv: list[str] | None = None) -> int:
         the simulator wait 30 s for packets that were never coming.
         """
         period = 1.0
-        deadline = time.perf_counter() + float(args.duration)
+        # A non-positive --duration means "no deadline": keep publishing until the
+        # process is interrupted.  An interactive session should not end on a timer
+        # while the operator is still wearing the headset.
+        _duration = float(args.duration)
+        deadline = float("inf") if _duration <= 0.0 else time.perf_counter() + _duration
         last = 0.0
         while time.perf_counter() < deadline and not pipeline._stop.is_set():
             frame = provider()

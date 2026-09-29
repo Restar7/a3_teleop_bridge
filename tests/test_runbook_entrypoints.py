@@ -168,7 +168,37 @@ def test_sim_does_not_reset_the_robot_when_a_stream_is_driving():
     assert wrap > guard
 
 
-def test_live_chain_exposes_a_viewer_mode():
+def test_interactive_sessions_are_open_ended_by_default():
+    """A teleop session must not stop on a timer while the operator is wearing it.
+
+    run_pico_sim.sh used to run the bridge for 150 s and the simulator for 3000
+    steps (60 s at 50 Hz), so an untouched session ended mid-stride and read as the
+    program quitting by itself.  Both defaults are now empty (open-ended) and each
+    side derives the other when only one is given, so they cannot disagree again.
+    """
+    script = (BRIDGE_ROOT / "scripts" / "run_pico_sim.sh").read_text(encoding="utf-8")
+    assert 'DURATION=""' in script
+    assert 'POLICY_STEPS=""' in script
+    assert "${POLICY_STEPS:+--policy-steps" in script
+    assert "${DURATION:+--duration" in script
+
+    chain = (BRIDGE_ROOT / "tools" / "run_live_chain.py").read_text(encoding="utf-8")
+    # the sim budget and the bridge deadline must both be optional
+    assert "default=None" in chain
+    assert "if args.policy_steps:" in chain
+    assert "0.0 if not args.duration else args.duration + 30.0" in chain
+
+    sim = Path("/home/wusichen/a3_teleop_ws/sonic_for_a3/gear_sonic/scripts/sim2sim_a3_mujoco.py")
+    if sim.is_file():
+        source = sim.read_text(encoding="utf-8")
+        # 0 or negative means "no budget" rather than an error
+        assert "config.max_policy_steps = None" in source
+        assert "--max-policy-steps must be positive" not in source
+        # and the operator is told before a bounded run ends
+        assert "FINAL_STEPS_WARNING_S" in source
+
+
+def test_online_session_wires_both_posture_priors():
     """The teleoperation entry point must be able to show the MuJoCo window.
 
     sim2sim disables the passive viewer under --batch-once, so "show me the

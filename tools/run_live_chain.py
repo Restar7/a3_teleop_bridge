@@ -16,7 +16,7 @@ Usage:
         --csv $A3WS/logs/a3_validation/stand/stand.csv --policy-steps 3000 --duration 150
     # recorded session (no headset needed)
     python tools/run_live_chain.py --recording $A3WS/recordings/m5_twist_torso_left \\
-        --csv $A3WS/logs/a3_validation/endurance_loop.csv --policy-steps 1500
+        --csv $A3WS/logs/a3_validation/endurance_loop.csv --policy-steps 1500   # or bound it
 """
 
 from __future__ import annotations
@@ -118,8 +118,18 @@ def main(argv: list[str] | None = None) -> int:
         "the *reference* comes from the stream instead",
     )
     parser.add_argument("--csv-fps", type=float, default=30.0)
-    parser.add_argument("--policy-steps", type=int, default=3000)
-    parser.add_argument("--duration", type=float, default=120.0, help="pipeline seconds")
+    parser.add_argument(
+        "--policy-steps",
+        type=int,
+        default=None,
+        help="simulator step budget; omit (or pass 0) to run until the window is closed",
+    )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="bridge seconds; omit (or pass 0) to publish until interrupted",
+    )
     parser.add_argument("--port", type=int, default=15640)
     parser.add_argument(
         "--recording",
@@ -197,7 +207,10 @@ def main(argv: list[str] | None = None) -> int:
         "--csv-fps",
         str(args.csv_fps),
         "--duration",
-        str(args.duration + 30.0),
+        # The bridge should outlive the simulator it feeds, so it gets the sim's
+        # budget plus a margin.  With no budget (open-ended session) it must not
+        # have a deadline either -- 0 means "publish until interrupted".
+        str(0.0 if not args.duration else args.duration + 30.0),
         "--endpoint",
         endpoint,
         "--stats",
@@ -279,8 +292,10 @@ def main(argv: list[str] | None = None) -> int:
         "--reference-startup-wait-s",
         str(args.reference_startup_wait_s),
         "--realtime",
-        "--max-policy-steps",
-        str(args.policy_steps),
+    ]
+    if args.policy_steps:
+        sim_cmd += ["--max-policy-steps", str(int(args.policy_steps))]
+    sim_cmd += [
         "--metrics-out",
         str(out_dir / "metrics.json"),
         "--timeseries-out",

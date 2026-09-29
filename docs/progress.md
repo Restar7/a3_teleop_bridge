@@ -1845,3 +1845,42 @@ joint_pos = last_safe.joint_pos_rad + step
 参考关节速度全部落在 143°/s 以内。
 
 **这同时也是实机的安全项** —— 真机会收到同样的超速指令。
+
+### M5r — 会话默认改成"一直跑"(不再是 60 秒自动退)
+
+用户:"我咋感觉往后走的时候直接给我退出程序了呢" + "那就不设限制最高的步数吧,就是让他一直跑"。
+
+**先查清**:那次**没有崩** —— 仿真日志零报错、metrics 正常写出、
+`steps=3000 (requested 3000)`,是**把分配的步数跑完了**。
+
+**真正的问题是三个时长互相不一致:**
+
+| 参数 | 原值 | 实际含义 |
+| --- | --- | --- |
+| `run_pico_sim.sh` `POLICY_STEPS` | 3000 | 仿真跑 **60 秒**(50 Hz) |
+| `run_pico_sim.sh` `DURATION` | 150 | bridge 跑 150 秒 |
+| `run_live_chain.py --duration` | 120 | (被上一条覆盖) |
+
+所以**遥操到第 60 秒,仿真自己退了** —— 从操作者角度看就是"程序突然没了"。
+
+**改成默认开放式:**
+
+1. **`run_pico_sim.sh`**:`DURATION` / `POLICY_STEPS` 默认都为空 → 两个参数都不传 →
+   **一直跑到关窗口或 Ctrl-C**(脚本的 teardown 会一起收掉 sender 和 bridge)。
+   只给其中一个时,另一个按 50 Hz 自动推导,避免再次不一致。
+   启动时明确打印:
+   ```text
+   [run] session length: unlimited -- close the MuJoCo window or press Ctrl-C to stop
+   ```
+2. **`run_live_chain.py`**:`--policy-steps` / `--duration` 默认 `None`,不传就不加对应命令行参数;
+   bridge 的时长在没有 sim 预算时传 **0**。
+3. **bridge `retarget_live.py`**:`--duration <= 0` = 无 deadline,一直发布。
+4. **`sim2sim`**:`--max-policy-steps <= 0` **不再报错**,而是解释为"无预算";
+   另外**有界运行会提前 10 秒提示**:
+   ```text
+   [sim] 10s of session budget left (N steps total) -- the simulator will stop on
+         its own.  Raise it with --policy-steps or run_pico_sim.sh --duration SECONDS.
+   ```
+
+**实测**:起一个不限时会话跑 **90 秒**(超过原来的 60 秒上限),`step=03982`,仿真和 bridge
+都还在 → 不再自停。**验收路径显式传步数,不受影响:仍 11/11 PASS**,pytest 225 passed。

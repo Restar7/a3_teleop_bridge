@@ -39,8 +39,13 @@ WS_ROOT="$A3WS"
 SONIC_ROOT="$SONIC_A3_ROOT"
 UMR_ROOT="$UMR_ROOT"
 
-DURATION=150
-POLICY_STEPS=3000
+# Both empty = open-ended: the session runs until you close the MuJoCo window or
+# press Ctrl-C (which tears the sender and bridge down).  A finite default used to
+# cut teleop short -- the bridge ran 150 s while the simulator stopped after 3000
+# steps (60 s), so the robot quit mid-stride and it read as a crash.  Set either
+# one to put a bound on it: --duration SECONDS / --policy-steps N.
+DURATION=""
+POLICY_STEPS=""
 PORT=5560
 PICO_PORT=5556
 # 50 Hz: the online solve now runs at p50 ~16 ms (p99 18 ms), i.e. a ~62 Hz
@@ -212,6 +217,18 @@ if [ "$bad" -gt 0 ]; then
   exit 1
 fi
 echo "[preflight] $ok ok, 0 failed."
+# Default is open-ended.  If only one of the two was given, derive the other so
+# they cannot disagree again.
+if [ -n "$DURATION" ] && [ -z "$POLICY_STEPS" ]; then
+  POLICY_STEPS=$((DURATION * 50))
+elif [ -z "$DURATION" ] && [ -n "$POLICY_STEPS" ]; then
+  DURATION=$((POLICY_STEPS / 50))
+fi
+if [ -n "$DURATION" ]; then
+  echo "[run] session length: ${DURATION}s bridge / $((POLICY_STEPS / 50))s sim ($POLICY_STEPS steps @50Hz)"
+else
+  echo "[run] session length: unlimited -- close the MuJoCo window or press Ctrl-C to stop"
+fi
 if [ "$CHECK_ONLY" = 1 ]; then
   echo "[preflight] --check only; nothing started."
   exit 0
@@ -317,8 +334,8 @@ set +e
 "$PY_SIM" "$BRIDGE_ROOT/tools/run_live_chain.py" "${CHAIN[@]}" \
     --csv "$WS_ROOT/logs/a3_validation_all_nomj/m5_stand/m5_stand.csv" \
     --csv-fps 30 \
-    --policy-steps "$POLICY_STEPS" \
-    --duration "$DURATION" \
+    ${POLICY_STEPS:+--policy-steps "$POLICY_STEPS"} \
+    ${DURATION:+--duration "$DURATION"} \
     --port "$PORT" \
     --sim-python "$PY_SIM" \
     --out-dir "$OUT_DIR"
