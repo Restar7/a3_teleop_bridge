@@ -5,9 +5,17 @@
 #   bash scripts/run_pico_sim.sh --check         # preflight only, start nothing
 #   bash scripts/run_pico_sim.sh --replay DIR    # no headset: drive from a recording
 #   bash scripts/run_pico_sim.sh --no-viewer     # headless (CI / no display)
+#
+# With the window on, a fall no longer ends the session: the robot is stood back
+# up on the live reference pose (--reset-on-fall, passed by run_live_chain.py).
+# Headless runs keep the old behaviour so acceptance still scores the fall.
 #   bash scripts/run_pico_sim.sh --skip-pico-probe   # do not pre-check headset streaming
 #   bash scripts/run_pico_sim.sh --pico-fps 30       # override the source rate (default 50)
 #   bash scripts/run_pico_sim.sh --duration 300 --policy-steps 6000
+#
+# 摔倒会自动复位(窗口模式):机器人被重新放到**实时参考的当前位姿**上继续跑,
+# 不会像以前那样倒了一直躺到结束。冷却 1 秒,避免同一个撑不住的姿势反复触发。
+# 无头模式(--no-viewer)不带这个,因为验收要靠 fall 判定。
 #
 # This starts BOTH halves and tears them down together:
 #   * the PICO sender  (sonic_for_a3/gear_sonic/scripts/pico_pose_zmq_minimal.py, port 5556)

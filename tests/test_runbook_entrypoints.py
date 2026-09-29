@@ -113,6 +113,37 @@ def test_stream_stats_parser_survives_python_none():
     assert module.parse_stream_stats("[reference-stream] {'received': 7, 'last_seq': 42}")["last_seq"] == 42
 
 
+def test_viewer_sessions_stand_back_up_after_a_fall():
+    """A fall must not end a viewer session, and must not touch batch runs.
+
+    Leaving the robot on the floor for the rest of the run made an interactive
+    session useless after the first fall, so viewer runs now pass --reset-on-fall
+    and sim2sim re-places the robot on the live reference pose (root position,
+    anchor orientation and the 29 joint positions, run through
+    fill_loop_qpos_motors so the closed ankle/waist loops are satisfied).
+
+    Batch and acceptance runs must keep the old behaviour: they score the fall, so
+    recovering from it would mean measuring the recovery instead.
+    """
+    chain = (BRIDGE_ROOT / "tools" / "run_live_chain.py").read_text(encoding="utf-8")
+    assert 'sim_cmd.append("--reset-on-fall")' in chain
+    # it belongs in the viewer branch, next to the batch-once branch it complements
+    viewer_branch = chain.index('sim_cmd.append("--reset-on-fall")')
+    batch_branch = chain.index('sim_cmd.append("--batch-once")')
+    assert abs(viewer_branch - batch_branch) < 600, "the flag must sit in the viewer branch"
+
+    sim = Path("/home/wusichen/a3_teleop_ws/sonic_for_a3/gear_sonic/scripts/sim2sim_a3_mujoco.py")
+    if not sim.is_file():
+        pytest.skip("sonic_for_a3 checkout not present")
+    source = sim.read_text(encoding="utf-8")
+    assert '"--reset-on-fall"' in source
+    assert "reset_on_fall: bool = False" in source, "batch runs must default to off"
+    assert "def _recover_from_fall(" in source
+    assert "fill_loop_qpos_motors(qpos, self.runtime, self.solver, dof)" in source
+    # the closed-loop joints have to be made consistent, not written raw
+    assert "FALL_RESET_GRACE_STEPS" in source
+
+
 def test_sim_does_not_reset_the_robot_when_a_stream_is_driving():
     """A viewer session was hard-resetting the robot every 5.0 seconds.
 

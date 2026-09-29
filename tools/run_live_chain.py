@@ -293,6 +293,12 @@ def main(argv: list[str] | None = None) -> int:
     # controls and a window you can close to stop.
     if not args.viewer:
         sim_cmd.append("--batch-once")
+    else:
+        # A viewer session is interactive: leaving the robot on the floor after the
+        # first fall makes the rest of the run useless, so stand it back up on the
+        # live reference pose.  Batch/acceptance runs must NOT do this -- they score
+        # the fall and would be measuring the recovery instead.
+        sim_cmd.append("--reset-on-fall")
     viewer = bool(args.viewer)
     if viewer and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         print("[live-chain] --viewer requested but no DISPLAY/WAYLAND_DISPLAY; running headless")
