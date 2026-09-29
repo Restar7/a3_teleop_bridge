@@ -61,6 +61,23 @@ def test_online_session_caps_torch_threads(monkeypatch):
         torch.set_num_threads(original)
 
 
+def test_live_dump_records_the_reference_orientation():
+    """Balance lives in the anchor rotation, so the dump has to carry it.
+
+    The dump had the reference's position but not its orientation, and sim2sim's
+    own ref_anchor_quat_* fields come from the seeding CSV playlist rather than
+    from the stream -- so a real run's reference rotation was unmeasurable.  That
+    cost a false alarm: the CSV's constant standing quaternion looked exactly like
+    a frozen live reference.
+    """
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "umr" / "umr_session.py").read_text(
+        encoding="utf-8"
+    )
+    for field in ("ref_qw", "ref_qx", "ref_qy", "ref_qz", "src_qw", "src_qx", "src_qy", "src_qz"):
+        assert f'"{field}"' in source, field
+    assert "self.root_quaternion(q_opt)" in source
+
+
 def test_online_session_wires_both_posture_priors():
     """The offline pipeline and the live path build their prior rows separately.
 
