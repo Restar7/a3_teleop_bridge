@@ -469,6 +469,12 @@ class UmrRetargetSession:
         if self.frame_dump is not None:
             source_root = np.asarray(frame.root_translation, dtype=np.float64).reshape(3)
             robot_root = np.asarray(self.root_position(q_opt), dtype=np.float64).reshape(3)
+            # The reference's *orientation*, not just its position.  Balance lives in
+            # the anchor rotation, and without it here there is no way to tell a
+            # reference that asks for a steady stance from one that is quietly
+            # tilted -- the sim's own ref_anchor_quat_* fields come from the seeding
+            # CSV playlist, not from this stream, so they cannot answer it.
+            ref_quat = np.asarray(self.root_quaternion(q_opt), dtype=np.float64).reshape(4)
             record = {
                 "t": round(time.time(), 4),
                 "cost": round(float(cost), 6),
@@ -481,6 +487,14 @@ class UmrRetargetSession:
                 "src_root_x": round(float(source_root[0]), 5),
                 "src_root_y": round(float(source_root[1]), 5),
                 "src_root_z": round(float(source_root[2]), 5),
+                "ref_qw": round(float(ref_quat[0]), 6),
+                "ref_qx": round(float(ref_quat[1]), 6),
+                "ref_qy": round(float(ref_quat[2]), 6),
+                "ref_qz": round(float(ref_quat[3]), 6),
+                "src_qw": round(float(np.asarray(frame.root_quat_wxyz).reshape(4)[0]), 6),
+                "src_qx": round(float(np.asarray(frame.root_quat_wxyz).reshape(4)[1]), 6),
+                "src_qy": round(float(np.asarray(frame.root_quat_wxyz).reshape(4)[2]), 6),
+                "src_qz": round(float(np.asarray(frame.root_quat_wxyz).reshape(4)[3]), 6),
             }
             record.update(_leg_angles_from_joints(joints))
             solved = self.joint_values(q_opt)
