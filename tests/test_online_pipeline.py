@@ -98,6 +98,33 @@ def test_live_dump_records_the_reference_orientation():
     assert "self.root_quaternion(q_opt)" in source
 
 
+def test_online_and_offline_agree_on_the_surface_normal_mode():
+    """The live path must not quietly diverge from the validated offline path.
+
+    The online session used to force ``surface_normal_cost_mode = "direct"``,
+    which matches the A3's surface normals against *SMPL-X's* normals -- two
+    different bodies -- while the offline pipeline (the one that is validated)
+    transports the A3's own T-pose normals through the SMPL face deformation.
+    Measured on one static standing frame, that single difference tilted the
+    reference's root roll by ~3.7 deg (offline direct -3.848 vs tpose_offset
+    -0.155) and the live session by 5.6 deg; switching the online session over
+    gives roll -0.83 vs the offline's -0.16, a yaw agreeing to 0.04 deg, and a
+    19x lower cost (0.207 -> 0.011).
+    """
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "umr" / "umr_session.py").read_text(
+        encoding="utf-8"
+    )
+    # the blanket override must be gone
+    assert 'args.surface_normal_cost_mode = "direct"' not in source
+    # the transport must be built once and used per frame
+    assert "compute_tpose_surface_normal_offsets" in source
+    assert "transport_tpose_robot_normals" in source
+    # and the single frame has to go in as a one-element batch
+    assert "[None, ...]" in source, "the transport reads motion_vertices as (T, V, 3)"
+    # the mode the solver finally sees must be the config's, not a hard-coded one
+    assert 'if self.robot_tpose_normals_smpl is not None else "direct"' in source
+
+
 def test_online_session_wires_both_posture_priors():
     """The offline pipeline and the live path build their prior rows separately.
 

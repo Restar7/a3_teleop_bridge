@@ -343,7 +343,47 @@ class UmrRetargetSession:
             len(self.smpl_slots), self.source_slot_part_ids, "normal_cost", "SurfaceNormal",
             log_prefix="UmrOnline",
         )
-        self.surface_normal_targets = None  # direct source normals (see solve_frame)
+        # Surface-normal mode.  This is the one place where the live path and the
+        # offline (validated) path disagreed, and it is not cosmetic:
+        # ``direct`` compares the A3's own surface normals against *SMPL-X's*
+        # normals -- two different bodies -- whereas ``tpose_offset`` transports
+        # the A3's T-pose normals through the current frame's SMPL face
+        # deformation, so robot surface is compared with robot surface.  Measured
+        # on one static standing frame: offline tpose_offset gives the reference a
+        # roll of -0.155 deg, offline direct -3.848 deg, and the live session
+        # (direct) -5.717 deg -- i.e. the mode alone tilted the robot by ~3.7 deg
+        # and the remaining ~2 deg came from the slot subset.  The old comment
+        # claimed tpose_offset needs the whole trajectory; for a *segmented* source
+        # it only needs quantities this session already has, computed once.
+        self.surface_normal_targets = None
+        self.robot_tpose_normals_smpl = None
+        if str(getattr(args, "surface_normal_cost_mode", "")) == "tpose_offset":
+            try:
+                source_tpose_slot_normals = self.body_segment_module.normalize_vectors(
+                    np.asarray(self.binding["closest_normals"], dtype=np.float32)
+                )
+                _robot_cfg = config.get("robot", {}) if isinstance(config, dict) else {}
+                self.robot_tpose_normals_smpl = module.compute_tpose_surface_normal_offsets(
+                    self.model,
+                    self.robot_template,
+                    source_tpose_slot_normals,
+                    _config_sample_pose_applier(self, _robot_cfg),
+                    _robot_cfg.get("point_cloud_center"),
+                    log_prefix="UmrOnline",
+                )[1]
+                print(
+                    "[umr-online] surface normal mode: tpose_offset "
+                    "(matches the offline pipeline; direct tilted the reference ~3.7 deg)"
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                self.robot_tpose_normals_smpl = None
+                print(
+                    f"[umr-online][WARN] tpose_offset unavailable ({exc}); "
+                    f"falling back to direct"
+                )
+        args.surface_normal_cost_mode = (
+            "tpose_offset" if self.robot_tpose_normals_smpl is not None else "direct"
+        )
         # Mirror ``retarget_smpl_to_humanoid_surface_vector.main``: a segmented
         # source (SMPL-X) keeps a bounded, seeded subset of the slots of every
         # body segment instead of the full correspondence pool.
@@ -405,6 +445,26 @@ class UmrRetargetSession:
         started = time.perf_counter()
         vertices, joints = self.source_surface(frame)
         source_slots, source_slot_normals = self.bind_source(vertices)
+        surface_normal_targets = None
+        if self.robot_tpose_normals_smpl is not None:
+            try:
+                # ``transport_tpose_robot_normals`` is written for a whole
+                # trajectory: ``motion_vertices`` must be (T, V, 3) and it returns
+                # (T, n_slots, 3).  Handing it a single frame makes it read the
+                # vertex count as the frame count and index a 3-vector by vertex
+                # id, so the frame goes in as a one-element batch.
+                surface_normal_targets = self.body_segment_module.transport_tpose_robot_normals(
+                    self.robot_tpose_normals_smpl,
+                    self.surface_binding,
+                    self.template_vertices_centered,
+                    self.faces,
+                    np.asarray(vertices, dtype=np.float32)[None, ...],
+                )[0]
+            except Exception as exc:  # pragma: no cover - defensive
+                if not getattr(self, "_tpose_warned", False):
+                    self._tpose_warned = True
+                    print(f"[umr-online][WARN] tpose normal transport failed: {exc}")
+                surface_normal_targets = None
         ground_distances, ground_weight_distances = _ground_contact_inputs(common, source_slots, args)
         prepare_ms = (time.perf_counter() - started) * 1e3
 
@@ -450,7 +510,7 @@ class UmrRetargetSession:
             getattr(self, "_previous_qpos2", None),
             source_slots,
             source_slot_normals,
-            None,  # direct mode: the solver matches against source_slot_normals
+            surface_normal_targets,  # None only when the T-pose transport failed
             self.selected_slot_ids,
             self.source_slot_part_ids,
             self.surface_point_slot_costs,
@@ -653,11 +713,13 @@ def _build_args(module, config_path: Path, defaults: Path | None = None, out_pat
     finally:
         sys.argv = previous
     module.fill_args_from_config(args)
-    # The online session matches robot normals against the *current* source normals
-    # ("direct" mode): the tpose-offset transport needs the full trajectory's
-    # template alignment and would add a per-frame cost we do not want online.
-    # Offline runs can be compared 1:1 with --surface-normal-cost-mode direct.
-    args.surface_normal_cost_mode = "direct"
+    # The surface-normal mode is deliberately NOT forced here.  It used to be
+    # pinned to "direct" on the grounds that the tpose-offset transport needs the
+    # whole trajectory, but that is only true for a *uniform* source; a segmented
+    # SMPL-X source needs quantities this session already computes once at init.
+    # Keeping the config's value (tpose_offset, as the offline pipeline uses)
+    # removes a real online/offline divergence in the reference's root
+    # orientation -- see the note where robot_tpose_normals_smpl is built.
 
     # the pipeline resolves config paths before handing them to the retarget
     # script (${VAR} expansion, relative-to-config resolution); do the same
@@ -812,6 +874,36 @@ def _ground_contact_inputs(common, source_slots, args):
         distances = distances.copy()
         distances[distances < snap_threshold] = 0.0
     return distances.reshape(-1), weight_distances.reshape(-1)
+
+
+def _config_sample_pose_applier(session, robot_cfg):
+    """Rebuild the offline pipeline's ``apply_config_sample_pose``.
+
+    ``compute_tpose_surface_normal_offsets`` needs to pose the *robot* in its
+    configured sample pose (the A3's T-pose) before reading its normals; offline
+    that closure is defined right next to the call.  The online session has the
+    same config sheet, so the closure is reproduced here rather than duplicated in
+    UMR.
+    """
+    module = session.module
+    config_data = session.args.config_data
+
+    def _apply(model, data):
+        try:
+            sample_pose = module.robot_sample_pose_for_source(
+                config_data, session.source_model_type, {}
+            )
+            if str(sample_pose) in {"default", "none", "raw", "off"}:
+                return
+            sample_qpos = module.robot_sample_qpos_for_pose(config_data, sample_pose)
+            module.apply_joint_qpos(model, data, sample_qpos, required=False)
+            module.apply_mimic_qpos(model, data, robot_cfg.get("mimic_qpos", {}) or {})
+        except Exception:
+            # A missing sample pose degrades to the model's default pose, which is
+            # what the offline path does too (``required=False``).
+            return
+
+    return _apply
 
 
 def _blank_frame(session):
