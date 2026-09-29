@@ -292,6 +292,32 @@ def test_fake_pico_sender_publishes_the_root_by_default():
     assert "the real sender does not" not in source
 
 
+def test_walk_following_probe_is_documented_and_correct():
+    """"The operator walks but the robot will not move" needs its own measurement.
+
+    The A3-fast observation is joint commands plus a 6D *orientation* difference
+    (ENCODER_TERMS); the reference's horizontal position never enters it, so the
+    robot cannot see or correct the gap.  On the official 001_walk_front_slow it
+    travels 50% of the reference, and scaling the reference 2x makes it worse
+    (21%), i.e. forward speed saturates rather than scaling.  Without this probe
+    that reads as a bridge or retarget bug.
+    """
+    tool = BRIDGE_ROOT / "tools" / "check_walk_following.py"
+    assert tool.is_file()
+    proc = subprocess.run([sys.executable, str(tool), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    source = tool.read_text(encoding="utf-8")
+    # the verdict must be based on the official set, not on synthetic clips
+    assert "a3_data" in source and "DEFAULT_CLIPS" in source
+    # and it must be able to show that scaling the reference does not help
+    assert "scale_root" in source
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "check_walk_following.py" in runbook
+    # the runbook must name the missing observation term, since that is the cause
+    assert "ENCODER_TERMS" in runbook
+    assert "ENCODER_FRAME_DIM" in runbook
+
+
 def test_pico_tracker_probe_is_documented_and_runnable():
     """The "legs barely move" limit is on the headset, and it needs its own probe.
 

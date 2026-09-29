@@ -1263,3 +1263,53 @@ sim2sim 的策略确实吃线程,不碰。`A3_OMP_THREADS` 可覆盖(`off` 还�
   (`body data available: False`),所以这个 0 不能定论,必须在推流时重跑。
 - runbook §17.7.1(实测数据)/ §17.7.2(一条命令分辨"缺动捕"还是"设置问题")
 - 回归防护:`test_pico_tracker_probe_is_documented_and_runnable`
+
+### M5g — 「人走开了机器人推不动」的真正原因:策略观测里没有位置
+
+用户确认腿部 tracker 正常,并指出真问题是**人走开了、机器人推不动**。
+我上一节"头显幅度不足"的判断需要修正 —— 输入不是瓶颈。
+
+#### 拿官方参考直接测(绕开一切链路)
+
+`tools/check_walk_following.py`,1200 步 = 24 s:
+
+| 参考 | 参考走 | 机器人走 | 比例 | fall |
+| --- | --- | --- | --- | --- |
+| `001_walk_front_slow` | 1.085 m | 0.546 m | **50%** | False |
+| 同一条,root 位移 ×2 | 2.170 m | **0.452 m** | 21% | False |
+| `009_walk_left_fast` | 1.630 m | 0.143 m | 8.8% | False |
+
+**放大参考反而走得更少** → 前进速度**饱和**(约 0.02 m/s),不是线性欠跟踪。
+误差**线性累积**(24 s 到 0.45 m),全部 `fall=False`(平衡正常,就是不位移)。
+
+#### 代码层面的原因
+
+`sim2sim_a3_mujoco.py:135`:
+
+```python
+ENCODER_TERMS = ("command_multi_future_nonflat", "motion_anchor_ori_b_mf_nonflat")
+ENCODER_FRAME_DIM = NUM_POLICY_DOFS * 2 + 6      # 29*2 关节 + 6 维朝向差
+ENCODER_INPUT_DIM = NUM_FUTURE_FRAMES * 64       # 640
+```
+
+每帧只有 **58 维关节指令 + 6 维 anchor 朝向差**。**参考的水平位置从未进入观测**;
+`anchor_pos_w` / `anchor_pos_error_m` 只在第 3297 行算出来写进 metrics。
+5 个 encoder 预设共用同一套 `ENCODER_TERMS`,**没有任何一个带位置项** —— 是 checkpoint 的固有属性。
+
+**所以 bridge / retarget 修不了**:参考播放已实测为 1.00×(无误),输入和链路都正常。
+
+#### 下一步选项(已写进 runbook §17.7.1b)
+
+| 方案 | 说明 |
+| --- | --- |
+| **A. 立刻可用** | 发送端 `--no-root-translation`:参考 root 固定站高,机器人与参考同处一地 → **原地踏步**,消除"被越拉越远"和"反复重置"的观感 |
+| **B. 复验工具** | `tools/check_walk_following.py` —— 换 checkpoint 后重跑看比例 |
+| **C. 根治** | 重训一个**观测里带 anchor 位置(或速度指令)**的策略 |
+| **D. 查机载栈** | 真机运行时可能有独立的行走控制器,与 sim 策略不是一回事 |
+
+#### 修正记录
+
+上一节我把"头显下肢幅度只有真实走路 1/3"当成根因,用户指出 tracker 没问题后重查:
+**即使输入完美,策略也不会位移**。头显幅度那组数据本身没错(70 次抬腿、屈膝 p50 17°),
+但它不是"走不动"的原因 —— 用官方参考(幅度绝对标准)测试同样只走 50%。
+两件事要分开:输入幅度、策略位移能力。**这一轮真正卡住的是后者。**

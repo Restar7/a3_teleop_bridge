@@ -407,10 +407,20 @@ class UmrRetargetSession:
             "dt": float(getattr(args, "dt", 1.0 / 30.0)),
         }
         if self.frame_dump is not None:
+            source_root = np.asarray(frame.root_translation, dtype=np.float64).reshape(3)
+            robot_root = np.asarray(self.root_position(q_opt), dtype=np.float64).reshape(3)
             record = {
                 "t": round(time.time(), 4),
                 "cost": round(float(cost), 6),
-                "root_z": round(float(self.root_position(q_opt)[2]), 5),
+                # The full root pose, not just z: "the operator walks but the robot
+                # does not follow" is a question about horizontal travel, and with
+                # only root_z in the dump it was unanswerable from the data.
+                "root_x": round(float(robot_root[0]), 5),
+                "root_y": round(float(robot_root[1]), 5),
+                "root_z": round(float(robot_root[2]), 5),
+                "src_root_x": round(float(source_root[0]), 5),
+                "src_root_y": round(float(source_root[1]), 5),
+                "src_root_z": round(float(source_root[2]), 5),
             }
             record.update(_leg_angles_from_joints(joints))
             solved = self.joint_values(q_opt)

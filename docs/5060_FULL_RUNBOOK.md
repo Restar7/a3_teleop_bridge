@@ -1399,6 +1399,64 @@ root_err: .035 .061 .447  .379  .406  .056  .181  .231  .121  .464  .050  .420  
 **注意这不是状态机抖动**:同一次运行的 `state_history` 只有
 `DISCONNECTED → CALIBRATION → TRACKING`,**零次 HOLD**;发送端也没有暂停或丢帧。
 
+#### 17.7.1b 「人走开了,机器人推不动」的真正原因:策略观测里没有"位置"
+
+你说腿部 tracker 没问题 —— 对的,我上一节的判断需要修正。**问题不在输入,在策略。**
+
+拿**官方验证过的走路参考**直接喂仿真(`tools/check_walk_following.py`,1200 步 = 24 s):
+
+| 参考 | 参考走 | 机器人走 | 比例 | fall |
+| --- | --- | --- | --- | --- |
+| `001_walk_front_slow` | 1.085 m | 0.546 m | **50%** | False |
+| 同一条,root 位移 **×2** | 2.170 m | **0.452 m** | 21% | False |
+| `009_walk_left_fast` | 1.630 m | **0.143 m** | 8.8% | False |
+
+**把参考放大反而走得更少** → 不是线性欠跟踪,而是**前进速度饱和**(约 0.02 m/s)。
+所有情况 `fall=False`:平衡没问题,就是**不位移**。
+
+**代码层面的原因**(`sim2sim_a3_mujoco.py:135`):
+
+```python
+ENCODER_TERMS = ("command_multi_future_nonflat", "motion_anchor_ori_b_mf_nonflat")
+ENCODER_FRAME_DIM = NUM_POLICY_DOFS * 2 + 6      # 29*2 关节位置+速度  +  6 维朝向差
+ENCODER_INPUT_DIM = NUM_FUTURE_FRAMES * 64       # 10 x 64 = 640
+```
+
+策略每帧只看到 **58 维关节指令 + 6 维 anchor 朝向差**。
+**参考的水平位置从来没有进入观测** —— `anchor_pos_w` / `anchor_pos_error_m`
+只在 3297 行算出来**写进 metrics 报表**。所以:
+
+- 机器人**看不见自己在落后**,也没有任何手段去修正;
+- 前进只是"迈步"的副产品,而迈步产生的前进量饱和在 ~0.02 m/s;
+- 参考越远/越快,落后的差距越大(且**线性累积**,实测 24 秒累积到 0.45 m)。
+
+5 个 encoder 预设(`a3_fast` / `a3_fast_100ms` / `a3_fast_100ms_zero` /
+`a3_fast_history` / `g1`)**共用同一套 `ENCODER_TERMS`**,只是窗口和间隔不同 ——
+**没有任何一个带位置项**。这是 checkpoint 的固有属性。
+
+**所以这不是 bridge / retarget 能修的**。参考播放是准的(1.00×,已实测),
+输入是好的,链路是好的。
+
+##### 那怎么办
+
+| 方案 | 说明 | 代价 |
+| --- | --- | --- |
+| **A. 立刻可用:让参考别漂** | 给发送端加 `--no-root-translation`,参考 root 固定成站高,机器人和参考始终同处一地 → **你原地踏步,机器人原地迈步**,不再有"被越拉越远"和"反复重置"的观感 | 放弃了位移遥操(反正现在也做不到) |
+| **B. 验证是不是策略问题** | `python tools/check_walk_following.py` —— 换 checkpoint 后重跑,比例上去就说明新策略有位移能力 | 几分钟 |
+| **C. 真正的修法** | 重训/换一个**观测里带 anchor 位置(或速度指令)**的策略。当前 640D 观测没有位置项,不改观测就永远学不会跟位置 | 需要训练侧 |
+| **D. 查机载栈** | 真机部署的运行时可能有**独立的行走控制器**(吃速度指令),和这个 sim 策略不是一回事。值得在 A3 侧确认 | 需要 A3 资料 |
+
+**推荐顺序:A 先把遥操变得可用 → D 确认真机有没有别的行走通路 → C 才是根治。**
+
+> 实测命令(改完策略后回来复验):
+> ```bash
+> cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+> $PY_BRIDGE tools/check_walk_following.py            # 默认三条走路动作
+> $PY_BRIDGE tools/check_walk_following.py --scale 2  # 附带验证"放大参考"有没有用
+> ```
+
+---
+
 #### 17.7.2 一条命令分辨"缺动捕"还是"设置问题"
 
 ```bash
