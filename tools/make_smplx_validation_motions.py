@@ -272,6 +272,12 @@ SUPPORT_BLEND_M = 0.05
 #: of 131 deg and a hip pitch of -103 deg.
 SQUAT_KNEE_RAD = 2.35
 SQUAT_HIP_RAD = 1.15
+#: A real deep squat dorsiflexes the ankle as the shin travels forward over the
+#: foot -- the shipped 043_squat_deep_repeated reference spans 37.4 deg of ankle.
+#: Without this the source has *no* ankle motion at all, the posture prior then
+#: (correctly) holds the robot ankle still, and the clip stops being a squat.
+SQUAT_ANKLE_RAD = 0.35
+BEND_ANKLE_RAD = 0.25
 
 #: Pedal press.  A3 actuates the ankle over [-52, +30] deg and has only a passive
 #: toe spring (+-13.2 deg), so the whole "lift the toe, press the pedal" gesture
@@ -378,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     # passive spring (+-13.2 deg) -- so the whole "lift the toe" gesture lives in
     # this one joint and it is worth a clip of its own.
     toe_up = find_axis(fk, L_ANKLE, L_FOOT, up)
+    toe_up_r = find_axis(fk, R_ANKLE, R_FOOT, up)
     twist = find_twist_axis(fk, SPINE2)
     # standing root height: put the ankle at the same world height the LaFan1
     # sample uses (~0.10 m), so UMR's ground alignment sees a standing human
@@ -398,12 +405,19 @@ def main(argv: list[str] | None = None) -> int:
         "stand": [],
         "raise_left_arm": [(L_SHOULDER, left_arm_up[0], 1.2)],
         "raise_right_arm": [(R_SHOULDER, right_arm_up[0], 1.2)],
-        "bend_knees": [(L_KNEE, knee_bend[0], 0.9), (R_KNEE, knee_bend_r[0], 0.9)],
+        "bend_knees": [
+            (L_KNEE, knee_bend[0], 0.9),
+            (R_KNEE, knee_bend_r[0], 0.9),
+            (L_ANKLE, toe_up[0], BEND_ANKLE_RAD),
+            (R_ANKLE, toe_up_r[0], BEND_ANKLE_RAD),
+        ],
         "squat_deep": [
             (L_HIP, hip_raise[0], SQUAT_HIP_RAD),
             (R_HIP, hip_raise_r[0], SQUAT_HIP_RAD),
             (L_KNEE, knee_bend[0], SQUAT_KNEE_RAD),
             (R_KNEE, knee_bend_r[0], SQUAT_KNEE_RAD),
+            (L_ANKLE, toe_up[0], SQUAT_ANKLE_RAD),
+            (R_ANKLE, toe_up_r[0], SQUAT_ANKLE_RAD),
         ],
         "lift_left_foot": [(L_HIP, hip_raise[0], 0.5), (L_KNEE, knee_bend[0], 0.9)],
         "lift_right_foot": [(R_HIP, hip_raise_r[0], 0.5), (R_KNEE, knee_bend_r[0], 0.9)],
