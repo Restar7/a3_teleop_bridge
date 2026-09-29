@@ -303,6 +303,41 @@ def validate(
                     f"motion, not a mirror error"
                 )
 
+    # ---- bound saturation -------------------------------------------------
+    # An existing check above only fires when a joint is pinned for >95% of the
+    # clip.  The ankle fails in a wider band than that: the posture prior
+    # (``solver.joint_map_cost``) covers the knee and NOT the ankle, so the
+    # surface objective parks it against whichever stop is nearest while still
+    # showing a large excursion.  Measured 2026-09-29, the left ankle sits on its
+    # -52 deg stop for 43-75% of every clip that bends the left leg (bend_knees
+    # 64/150, lift_left_foot 73/150, squat_deep 112/150, press_pedal 125/249)
+    # against an official reference that never goes below -38.6 deg -- and the
+    # suite still reported 11/11 PASS.  Reported, not failed: the point is to
+    # stop "all PASS" from reading as "the ankle is fine".
+    for i, name in enumerate(names):
+        span = float(limits.upper[i]) - float(limits.lower[i])
+        if span <= 0.0:
+            continue
+        column = joint_pos[:, i]
+        at_low = float(((column - float(limits.lower[i])) <= 0.02 * span).mean())
+        at_high = float(((float(limits.upper[i]) - column) <= 0.02 * span).mean())
+        fraction, bound, value = max(
+            (at_low, "lower", float(limits.lower[i])),
+            (at_high, "upper", float(limits.upper[i])),
+        )
+        if 0.20 <= fraction <= 0.95:
+            report["diagnostics"].append(
+                f"{name}: spends {fraction * 100:.0f}% of the clip against its {bound} "
+                f"stop ({value:+.3f} rad) but still moves "
+                f"{float(column.max() - column.min()):.3f} rad -- saturation, not a "
+                f"pinned joint; the retarget is riding the bound instead of tracking"
+                + (
+                    " (the ankle has no posture prior; see runbook 17.8.6)"
+                    if "ankle" in name
+                    else ""
+                )
+            )
+
     # ---- velocity / acceleration --------------------------------------
     if joint_pos.shape[0] > 2 and dt > 0:
         vel = np.diff(joint_pos, axis=0) / dt

@@ -194,6 +194,18 @@ def _ankle_world_z(fk: SmplFk, poses: np.ndarray, trans: np.ndarray) -> np.ndarr
     return joints[:, :, 2] + trans[:, 2][:, None]
 
 
+def ankle_flexion_rad(joints: np.ndarray) -> float:
+    """Left ankle angle: the shin (knee->ankle) against the foot (ankle->foot).
+
+    A3 has no actuated toe, so "lift the toe and press the pedal" is entirely an
+    ankle gesture -- measuring it here is what makes the claim checkable.
+    """
+    shin = np.asarray(joints[L_ANKLE]) - np.asarray(joints[L_KNEE])
+    foot = np.asarray(joints[L_FOOT]) - np.asarray(joints[L_ANKLE])
+    denom = max(float(np.linalg.norm(shin)) * float(np.linalg.norm(foot)), 1e-12)
+    return float(np.arccos(np.clip(float(shin @ foot) / denom, -1.0, 1.0)))
+
+
 def build_clip(
     fk: SmplFk,
     frames: int,
@@ -210,6 +222,46 @@ def build_clip(
     return target[None, :, :] * ramp[:, None, None]
 
 
+def build_sequence(
+    frames: int,
+    keyframes: list[tuple[float, list[tuple[int, np.ndarray, float]]]],
+) -> np.ndarray:
+    """Blend between absolute poses at the given times.
+
+    ``build_clip`` only ramps neutral -> one target, which cannot express a pedal
+    press: the ankle has to cock *up* and then drive *down* past neutral.  Each
+    keyframe here is the pose at that instant -- **not** an increment -- and the
+    body smoothsteps from one to the next.  An additive form makes the second
+    phase depend on the first phase's amplitude, which is exactly how the press
+    half silently came out as "less toe-up" instead of "toe-down" and pinned the
+    ankle on its -52 deg stop.
+    """
+    times = [float(k[0]) for k in keyframes]
+    targets = []
+    for _, specs in keyframes:
+        target = np.zeros((21, 3))
+        for joint, axis, angle in specs:
+            target[joint - 1] += axis * angle
+        targets.append(target)
+
+    t = np.linspace(0.0, 1.0, frames)
+    body = np.zeros((frames, 21, 3))
+    for i in range(len(keyframes) - 1):
+        lo, hi = times[i], times[i + 1]
+        if hi <= lo:
+            continue
+        mask = (t >= lo) & (t < hi)
+        if not mask.any():
+            continue
+        u = smoothstep(np.clip((t[mask] - lo) / (hi - lo), 0.0, 1.0))
+        body[mask] = (
+            targets[i][None, :, :] * (1.0 - u)[:, None, None]
+            + targets[i + 1][None, :, :] * u[:, None, None]
+        )
+    body[t >= times[-1]] = targets[-1]
+    return body
+
+
 #: Distance (m) over which a foot stops counting as "planted".  Used to blend
 #: between the two feet continuously so the root never jumps when the support
 #: foot changes.
@@ -217,10 +269,17 @@ SUPPORT_BLEND_M = 0.05
 
 #: Deep-squat joint angles, chosen to land inside the envelope the A3 policy was
 #: validated on: the shipped ``043_squat_deep_repeated`` reference reaches a knee
-#: of 131 deg and a hip pitch of -103 deg, so a clip that never bends that far
-#: cannot claim to have tested a squat.
+#: of 131 deg and a hip pitch of -103 deg.
 SQUAT_KNEE_RAD = 2.35
 SQUAT_HIP_RAD = 1.15
+
+#: Pedal press.  A3 actuates the ankle over [-52, +30] deg and has only a passive
+#: toe spring (+-13.2 deg), so the whole "lift the toe, press the pedal" gesture
+#: lives in the ankle.  The official motions reach -38.6 deg at most, so the
+#: target here is sized to stay inside that rather than on the stop.
+PEDAL_LIFT_HIP_RAD = 0.70
+PEDAL_LIFT_KNEE_RAD = 1.10
+PEDAL_TOE_RAD = 0.55
 
 
 def support_anchored_root(
@@ -314,6 +373,11 @@ def main(argv: list[str] | None = None) -> int:
     # copied from the left side
     knee_bend_r = find_axis(fk, R_KNEE, R_ANKLE, -forward)
     hip_raise_r = find_axis(fk, R_HIP, R_KNEE, forward)
+    # ankle dorsiflexion swings the foot up (toes up); the same axis reversed
+    # plantarflexes (the press).  A3 has no actuated toe -- foot_toe_joint is a
+    # passive spring (+-13.2 deg) -- so the whole "lift the toe" gesture lives in
+    # this one joint and it is worth a clip of its own.
+    toe_up = find_axis(fk, L_ANKLE, L_FOOT, up)
     twist = find_twist_axis(fk, SPINE2)
     # standing root height: put the ankle at the same world height the LaFan1
     # sample uses (~0.10 m), so UMR's ground alignment sees a standing human
@@ -352,10 +416,46 @@ def main(argv: list[str] | None = None) -> int:
         ],
     }
 
+    #: A pedal press is the one motion that needs a *sequence*: the foot has to
+    #: clear the floor, cock the toe up, then push back down.  ``build_clip`` only
+    #: ramps neutral -> one target, so this clip is built from phases instead.
+    sequences: dict[str, list[tuple[float, list[tuple[int, np.ndarray, float]]]]] = {
+        "press_pedal": [
+            # neutral -> foot clear of the floor with the toes cocked up
+            (0.00, []),
+            (0.28, [
+                (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
+                (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
+                (L_ANKLE, toe_up[0], +PEDAL_TOE_RAD),
+            ]),
+            # hold the cocked pose so the reference has something to track
+            (0.45, [
+                (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
+                (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
+                (L_ANKLE, toe_up[0], +PEDAL_TOE_RAD),
+            ]),
+            # drive the ankle down past neutral: this is the press
+            (0.72, [
+                (L_HIP, hip_raise[0], PEDAL_LIFT_HIP_RAD),
+                (L_KNEE, knee_bend[0], PEDAL_LIFT_KNEE_RAD),
+                (L_ANKLE, toe_up[0], -PEDAL_TOE_RAD),
+            ]),
+            # release and set the foot back down
+            (1.00, []),
+        ],
+    }
+
     metadata: dict[str, dict] = {}
-    for name, specs in clips.items():
+
+    # phased clips join the single-target ones here so everything downstream
+    # (recordings, retarget, acceptance, validation) treats them identically
+    builders: dict[str, tuple[str, object]] = {name: ("clip", specs) for name, specs in clips.items()}
+    builders.update({name: ("sequence", phases) for name, phases in sequences.items()})
+
+    for name, (kind, spec) in builders.items():
         # motion on top of the natural stance (so `stand` really is standing)
-        body = build_clip(fk, frames, specs) + stance[None, :, :]
+        motion = build_clip(fk, frames, spec) if kind == "clip" else build_sequence(frames, spec)
+        body = motion + stance[None, :, :]
         poses = np.zeros((frames, 55, 3), dtype=np.float32)
         poses[:, 0] = BASE_ROOT_ROTATION.astype(np.float32)
         poses[:, 1:22] = body.astype(np.float32)
@@ -392,6 +492,28 @@ def main(argv: list[str] | None = None) -> int:
             "right_ankle_z_gain": float(world_end[R_ANKLE][2] - world_start[R_ANKLE][2]),
             "left_knee_z_gain": float(world_end[L_KNEE][2] - world_start[L_KNEE][2]),
             "left_ankle_world_z": float(world_start[L_ANKLE][2]),
+            "left_ankle_pitch_span_rad": float(
+                np.ptp(
+                    [
+                        ankle_flexion_rad(fk.joints(frame[1:22], frame[0]))
+                        for frame in poses
+                    ]
+                )
+            ),
+            # a phased clip returns to neutral, so start-vs-end is blind to it;
+            # these peak-over-the-clip metrics are what a sequence has to be judged on
+            "left_ankle_z_max_gain": float(
+                (
+                    _ankle_world_z(fk, poses, trans)[:, L_ANKLE]
+                    - _ankle_world_z(fk, poses, trans)[0, L_ANKLE]
+                ).max()
+            ),
+            "left_ankle_z_min_gain": float(
+                (
+                    _ankle_world_z(fk, poses, trans)[:, L_ANKLE]
+                    - _ankle_world_z(fk, poses, trans)[0, L_ANKLE]
+                ).min()
+            ),
             "left_ankle_floor_drift_m": float(
                 np.abs(_ankle_world_z(fk, poses, trans)[:, L_ANKLE] - _ankle_world_z(fk, poses, trans)[0, L_ANKLE]).max()
             ),
@@ -418,6 +540,10 @@ def main(argv: list[str] | None = None) -> int:
             # planted; without both, the clip tests nothing about squatting
             "squat_deep": lambda c: c["root_z_span_m"] > 0.25
             and c["left_ankle_floor_drift_m"] < 0.02,
+            # a pedal press only counts if the foot leaves the floor AND the ankle
+            # both cocks up and drives down -- one direction alone is not a press
+            "press_pedal": lambda c: c["left_ankle_z_max_gain"] > 0.05
+            and c["left_ankle_pitch_span_rad"] > 0.5,
             "lift_left_foot": lambda c: c["left_ankle_z_gain"] > 0.05 or c["left_ankle_forward_gain"] > 0.1,
             "lift_right_foot": lambda c: c["right_ankle_z_gain"] > 0.05
             or c["right_ankle_forward_gain"] > 0.1,
@@ -434,9 +560,12 @@ def main(argv: list[str] | None = None) -> int:
                     "name": name,
                     "npz": str(npz_path),
                     "rest_skeleton": str(rest_npz),
+                    "kind": kind,
                     "specs": [
                         {"joint": int(j), "axis": [float(v) for v in a], "angle_rad": float(ang)}
-                        for j, a, ang in specs
+                        for j, a, ang in (spec if kind == "clip" else [
+                            entry for _t, phase in spec for entry in phase
+                        ])
                     ],
                     "axes_discovered": {
                         "left_arm_up": [float(v) for v in left_arm_up[0]],

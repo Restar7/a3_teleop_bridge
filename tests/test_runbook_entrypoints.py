@@ -378,8 +378,10 @@ def test_generated_motions_start_from_a_natural_stance():
     source = (BRIDGE_ROOT / "tools" / "make_smplx_validation_motions.py").read_text(encoding="utf-8")
     assert "def natural_stance(" in source
     assert "arm_angle_from_vertical" in source
-    # the stance must be added to every clip, not only to `stand`
-    assert "build_clip(fk, frames, specs) + stance[None, :, :]" in source
+    # the stance must be added to every clip, not only to `stand` -- check the
+    # intent rather than one literal line, since phased clips join the same builder
+    assert "motion + stance[None, :, :]" in source
+    assert "build_clip(fk, frames, spec) if kind" in source
 
 
 def test_acceptance_clips_have_arms_down():

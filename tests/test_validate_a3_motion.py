@@ -293,12 +293,12 @@ REAL_CLIP_DIR = Path("/home/wusichen/a3_teleop_ws/UMR/output/a3_pico_all")
 @pytest.mark.skipif(
     not REAL_CLIP_DIR.is_dir(), reason="acceptance npz set not present on this machine"
 )
-def test_all_ten_acceptance_clips_pass():
+def test_all_eleven_acceptance_clips_pass():
     from a3_teleop_bridge.umr.offline import load_umr_result
 
     names = list(validator.load_contract().policy_joint_names)
     clips = sorted(REAL_CLIP_DIR.glob("*.npz"))
-    assert len(clips) == 10, [c.name for c in clips]
+    assert len(clips) == 11, [c.name for c in clips]
     failures = []
     for path in clips:
         result = load_umr_result(path)
@@ -319,6 +319,48 @@ def test_all_ten_acceptance_clips_pass():
 @pytest.mark.skipif(
     not REAL_CLIP_DIR.is_dir(), reason="acceptance npz set not present on this machine"
 )
+def test_ankle_saturation_is_reported():
+    """A pinned ankle must not hide behind an all-PASS acceptance run.
+
+    The joint-space posture prior covers the knee and not the ankle, so the
+    surface objective drives the ankle onto whichever stop is nearest: the left
+    ankle sits on its -52 deg stop for 43-75% of every clip that bends the left
+    leg, while the official references never go below -38.6 deg.  The acceptance
+    suite passed 11/11 through all of it, so this diagnostic is the thing that
+    makes it visible.
+    """
+    names = list(validator.load_contract().policy_joint_names)
+    limits = validator.load_limits()
+    n = len(names)
+    dt = 0.02
+    frames = 120
+    joint_pos = np.zeros((frames, n))
+    # left knee sweeps so the clip is otherwise healthy; ankle sits on its stop
+    li = names.index("left_ankle_pitch_joint")
+    lower = float(limits.lower[list(limits.joint_names).index("left_ankle_pitch_joint")])
+    # half the clip parked on the stop, half sweeping -- the band the >95% check misses
+    joint_pos[: frames // 2, li] = lower
+    joint_pos[frames // 2 :, li] = lower + np.linspace(0.0, 0.75, frames - frames // 2)
+    knee = names.index("left_knee_joint")
+    joint_pos[:, knee] = np.linspace(0.3, 1.2, frames)
+    joint_vel = np.zeros_like(joint_pos)
+    joint_vel[1:] = np.diff(joint_pos, axis=0) / dt
+    joint_vel[0] = joint_vel[1]
+    root_pos = np.tile(np.array([0.0, 0.0, 1.07]), (frames, 1))
+    root_quat = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (frames, 1))
+    report = validator.validate(joint_pos, joint_vel, root_pos, root_quat, dt)
+    notes = [d for d in report["diagnostics"] if "ankle_pitch" in d and "pinned" in d]
+    assert notes, report["diagnostics"]
+    assert "saturation, not a" in notes[0]
+    # and a healthy ankle must NOT be flagged
+    # a healthy ankle moves well clear of both stops
+    joint_pos[:, li] = lower + 0.3 + 0.15 * np.sin(np.linspace(0, 3 * np.pi, frames))
+    joint_vel[1:] = np.diff(joint_pos, axis=0) / dt
+    joint_vel[0] = joint_vel[1]
+    clean = validator.validate(joint_pos, joint_vel, root_pos, root_quat, dt)
+    assert not [d for d in clean["diagnostics"] if "pinned" in d]
+
+
 def test_the_set_contains_a_real_squat():
     """The lower body has to be tested by the acceptance set, not just named in it.
 
