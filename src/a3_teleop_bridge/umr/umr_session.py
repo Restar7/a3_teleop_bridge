@@ -571,8 +571,14 @@ class UmrRetargetSession:
                 "src_qz": round(float(np.asarray(frame.root_quat_wxyz).reshape(4)[3]), 6),
             }
             record.update(_leg_angles_from_joints(joints))
+            record.update(_arm_angles_from_joints(joints))
             solved = self.joint_values(q_opt)
-            for name in LEG_JOINTS:
+            # Every policy joint, not just the legs.  A hand-picked subset has now
+            # cost two investigations: the reference's orientation was invisible
+            # (fixed by ref_q*/src_q* above) and "the arms went forward and froze"
+            # is invisible because the arms were never dumped.  29 floats a frame
+            # is nothing next to another run.
+            for name in _DUMP_JOINTS:
                 record[f"ref_{name}"] = round(float(solved.get(name, float("nan"))), 5)
             self.frame_dump.write(**record)
         return q_opt, info
@@ -949,8 +955,45 @@ LEG_JOINTS = (
     "left_hip_pitch_joint", "left_knee_joint", "left_ankle_pitch_joint",
     "right_hip_pitch_joint", "right_knee_joint", "right_ankle_pitch_joint",
 )
+
+#: Everything the dump records from the solved reference.  Legs are listed first
+#: because report_live_dump.py reads those by name, but the arms and waist ride
+#: along so a frozen arm is measurable instead of guessed at.
+_DUMP_JOINTS = LEG_JOINTS + (
+    "left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint",
+    "left_elbow_joint", "left_wrist_roll_joint", "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint", "right_shoulder_roll_joint", "right_shoulder_yaw_joint",
+    "right_elbow_joint", "right_wrist_roll_joint", "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+    "waist_yaw_joint", "waist_roll_joint", "waist_pitch_joint",
+)
 #: SMPL-X indices used for the source-side leg angles (hip, knee, ankle)
 _SMPLX_LEG = {"L": (1, 4, 7), "R": (2, 5, 8)}
+#: SMPL-X indices for the source-side arm elevation (shoulder, elbow)
+_SMPLX_ARM = {"L": (16, 18), "R": (17, 19)}
+
+
+def _arm_angles_from_joints(joints) -> dict:
+    """Source-side arm elevation in degrees, relative to straight down.
+
+    Recorded next to the reference so "the arms went forward and stopped" can be
+    attributed: the same freeze appears in both columns when the *input* stopped
+    (a controller dropping out), and only in the reference when the pipeline did.
+    """
+    import numpy as _np
+
+    out: dict[str, float] = {}
+    for side, (shoulder, elbow) in _SMPLX_ARM.items():
+        v = _np.asarray(joints[elbow], dtype=_np.float64) - _np.asarray(
+            joints[shoulder], dtype=_np.float64
+        )
+        norm = float(_np.linalg.norm(v))
+        if norm < 1e-9:
+            out[f"src_{side}_arm_deg"] = float("nan")
+            continue
+        out[f"src_{side}_arm_deg"] = float(_np.degrees(_np.arccos(_np.clip(-v[2] / norm, -1.0, 1.0))))
+    return out
 
 
 def _leg_angles_from_joints(joints) -> dict:

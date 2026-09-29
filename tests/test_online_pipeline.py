@@ -81,6 +81,28 @@ def test_warmup_solve_is_genuinely_throwaway():
     assert "self._previous_qpos2 = None" in block
 
 
+def test_live_dump_records_every_joint_and_the_source_arms():
+    """The dump has to be able to attribute a frozen limb, not just show one.
+
+    Twice now a hand-picked field list hid the answer: the reference's orientation
+    was invisible ("the reference must be frozen"), and later the arms were, after
+    "the arms went forward and stopped".  A frozen arm with a *low* retarget cost
+    means the input stopped, not the pipeline -- and telling those apart needs the
+    source's own arm signal next to the reference's joints.
+    """
+    source = (BRIDGE_ROOT / "src" / "a3_teleop_bridge" / "umr" / "umr_session.py").read_text(
+        encoding="utf-8"
+    )
+    # every policy joint, not a hand-picked few
+    assert "_DUMP_JOINTS = LEG_JOINTS + (" in source
+    for joint in ("left_shoulder_pitch_joint", "right_elbow_joint", "waist_pitch_joint"):
+        assert f'"{joint}"' in source, joint
+    # and the source-side arm elevation that attributes a freeze
+    assert "_SMPLX_ARM" in source
+    assert "src_{side}_arm_deg" in source
+    assert "_arm_angles_from_joints(joints)" in source
+
+
 def test_live_dump_records_the_reference_orientation():
     """Balance lives in the anchor rotation, so the dump has to carry it.
 
