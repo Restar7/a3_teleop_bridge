@@ -1243,6 +1243,7 @@ A3   首次动作           站立保持、无抖动;再做分级动作
 
 | 现象 | 根因 | 修在哪 |
 | --- | --- | --- |
+| bridge **白烧 14 个核**(35 线程 / 1453% CPU) | `torch.set_num_threads(1)` 在 import **之后**才调,OpenMP 池早已按整机建好,空闲 worker 忙等自旋 | `run_live_chain.py` 注入 `OMP_NUM_THREADS=1` 等,**import 前**生效 → 5 线程 / 50% CPU(§17.9) |
 | solver 只有 **~21 Hz**,近半帧被丢 | **不是算法**:`torch` 默认按核数开 16 个 intra-op 线程,而 SMPL-X LBS 只乘很小的矩阵,屏障同步开销远超收益(16 线程比单线程**慢 5 倍**) | `umr_session.configure_torch_threads()` 压到 1,`A3_TORCH_THREADS` 可覆盖(§17.1) |
 | **不能深蹲 / 抬腿**,骨盆一动不动 | 验收动作生成器把 root 写成**常量** `[0,0,root_height]`,骨盆被钉死;屈膝只能把脚踩穿地面 | `support_anchored_root()`:骨盆由"支撑脚踩地"反解(§17.8) |
 | 深蹲时髋角**顶在限位上** | 源侧髋屈 1.85 rad 过大,retarget 后到 −143°,正好撞 A3 的 −144° 下限 | `SQUAT_HIP_RAD` 1.85→1.15,落到 −105.7°(官方 −102.6°) |
@@ -1564,6 +1565,76 @@ $PY_BRIDGE tools/run_a3_validation_suite.py --data-dir $WS/UMR/output/a3_pico_al
 
 > **⚠️ 顺序不能颠倒**:`*.floating_mjcf.xml` 是**每条片段共享的中间产物**,重跑重定向会
 > 覆盖它。所以①→③要成批做完再跑④;中途插单条重跑会让别的片段的 npz 与 xml 对不上。
+
+---
+
+### 17.9 「关掉什么能更快」——先别关功能,先别烧核
+
+**结论:这一轮真正的浪费不是某个功能,是 bridge 自己在空转 14 个核。**
+
+#### 17.9.1 真凶:OpenMP 线程池空转(已修)
+
+`torch.set_num_threads(1)` 是**在 import 之后**调的,而 torch 的 OpenMP 线程池在
+**import 时**就已经按整机核数建好了 —— 限制线程数并不会缩小已经存在的池子,那些空闲
+worker 在并行区之间**忙等自旋**。实测这台 16 核机器上的 bridge 进程:
+
+| | 线程数 | bridge CPU | live 速率 |
+| --- | --- | --- | --- |
+| 修复前 | **35** | **1453% 单核(≈14.5 核)** | 26.5 Hz(丢 135 帧) |
+| 修复后 | **5** | **50% 单核** | **30.0 Hz(丢 0 帧)** |
+
+**CPU 降 29 倍。** 而它的实际工作量不到半个核 —— 也就是说有 ~14 个核在做**屏障等待**,
+而这些核本该给旁边的策略(sim2sim 自己有 52 个线程)。这同时解释了为什么 live 链路
+一直比进程内基准慢。
+
+修法:`run_live_chain.py` 在启动 bridge 时注入环境变量(`OMP_NUM_THREADS` /
+`MKL_NUM_THREADS` / `OPENBLAS_NUM_THREADS` / `NUMEXPR_NUM_THREADS` = 1),
+**在 import 前**生效,池子直接只建一个 worker。
+
+```bash
+# 默认就是 1,什么都不用做。想改:
+A3_OMP_THREADS=4 bash scripts/run_pico_sim.sh        # 指定线程数
+A3_OMP_THREADS=off bash scripts/run_pico_sim.sh      # 还原系统默认(排查用)
+```
+
+> **只作用于 bridge**。sim2sim 的策略是真正的大计算量、**确实吃线程**,所以不碰它。
+
+#### 17.9.2 那到底还有哪些能关?
+
+按实测收益排序:
+
+| 手段 | 实测收益 | 建议 |
+| --- | --- | --- |
+| **`OMP_NUM_THREADS=1`(已内置)** | CPU **1453%→50%**,26.5→30.0 Hz | **已默认开启**,不用管 |
+| **关掉桌面程序**(chrome / 微信 / VSCode / gnome 扩展) | 负载从 ~22 降到 ~6(16 核),solver 45→26 ms | **收益最大的一条**,尤其真机联调时 |
+| `run_pico_sim.sh --no-viewer` | bridge CPU 54.4%→70.2%(±16% 单核) | **影响很小**:两次都跑在 30 Hz 且丢 0 帧,开窗口是为了看画面,不是瓶颈 |
+| `A3_TORCH_THREADS` | 已默认 1,是**第二道**保险 | 不用动 |
+| **`--dump-frames` 不用关** | **7.4 µs/帧 = 0.22 ms/s** | **纯属噪音,关它没有意义** |
+| `--policy-steps` / `--duration` | 不影响速度,只影响跑多久 | 随意 |
+
+一句话:**先关掉不相干的桌面程序;功能性的开关(窗口、录帧)都不是瓶颈。**
+
+> 顺带测到的:sim2sim 进程 **53 个线程但只吃 0.70 个核**(策略跑在 CUDA 上,CPU 侧很轻),
+> 所以它也不是瓶颈 —— 不需要为了"让 bridge 快一点"去动它。
+
+#### 17.9.3 怎么自己确认
+
+```bash
+cd /home/wusichen/a3_teleop_ws/a3_teleop_bridge && source scripts/env_orin.sh
+
+# 跑起来之后,另开一个终端看 bridge 到底吃多少核
+BPID=$(pgrep -f "a3_teleop_bridge.apps.retarget_live" | head -1)
+echo "线程数: $(ls /proc/$BPID/task | wc -l)"          # 期望 ~5,不是 ~35
+top -bn1 -p $BPID | tail -2                            # 期望 ~50%,不是 ~1400%
+```
+
+判断标准:
+
+| 看到 | 含义 |
+| --- | --- |
+| 线程 ~5、CPU ~50% | 正常 |
+| 线程 ~35、CPU >500% | `A3_OMP_THREADS` 被设成了 `off`,或者环境里已有别的 `OMP_NUM_THREADS` |
+| 线程 ~5、CPU 但仍 >300% | 另有原因,先看 `load average` 是不是被桌面程序顶满了 |
 
 ---
 

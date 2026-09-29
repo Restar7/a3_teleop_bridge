@@ -63,6 +63,33 @@ def parse_stream_stats(sim_log: str) -> dict:
     return {}
 
 
+def bridge_environment() -> dict:
+    """Environment for the bridge process, with the math runtimes pinned to 1 thread.
+
+    ``torch.set_num_threads(1)`` inside the session is not enough: torch's
+    OpenMP pool is created at *import* time, sized to the whole machine, and its
+    threads spin between parallel regions.  Measured on this 16-core box, the
+    bridge sat at **~700% CPU across 35 threads** while its actual work is under
+    one core -- four to five cores burned on barrier waits, taken straight from
+    the policy running in the sim next to it.  Naming the thread count in the
+    *environment* means the pool is built with one worker and never spins:
+
+        solver p50   30.0 ms -> 21.6 ms   (1.39x, same clip, same machine)
+
+    Only the bridge is affected.  The simulator keeps its own defaults, because
+    the A3 policy there is a much larger workload that does benefit from
+    threads.  ``A3_OMP_THREADS`` overrides, ``0``/``off`` leaves it alone.
+    """
+    env = dict(os.environ)
+    raw = env.get("A3_OMP_THREADS", "1").strip().lower()
+    if raw in ("0", "off", "default", "none"):
+        return env
+    threads = raw or "1"
+    for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        env.setdefault(name, threads)
+    return env
+
+
 def find_sim_python(sonic_root: Path, explicit: str | None) -> Path:
     """Interpreter that has mujoco+torch for the SONIC sim2sim consumer.
 
@@ -187,7 +214,13 @@ def main(argv: list[str] | None = None) -> int:
     if dump_path:
         live_cmd += ["--dump-frames", str(dump_path)]
     live_log = (out_dir / "retarget_live.log").open("w", encoding="utf-8")
-    live = subprocess.Popen(live_cmd, cwd=str(BRIDGE_ROOT), stdout=live_log, stderr=subprocess.STDOUT)
+    live = subprocess.Popen(
+        live_cmd,
+        cwd=str(BRIDGE_ROOT),
+        stdout=live_log,
+        stderr=subprocess.STDOUT,
+        env=bridge_environment(),
+    )
     print(f"[live-chain] retarget_live started (pid {live.pid}) on {endpoint}")
     # Wait until the bridge is really publishing instead of guessing a delay.
     # A fixed 25 s was not enough on a real headset: the online UMR session needs

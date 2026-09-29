@@ -326,3 +326,29 @@ live 路径是 warm-start + `iters=1`,参考流还有缺口(`max_gap_ms` 1594 ms
   —— 断言在线路径默认 1 线程,并验证 `A3_TORCH_THREADS` 三种取值
 - `tests/test_runbook_entrypoints.py::test_generated_motions_derive_the_root_from_the_pose`
   —— 断言旧的常量赋值 `trans[:, 2] = root_height` 不再存在
+
+### 5. 补充:还有 14 个核在空转(比线程数那一步更狠)
+
+`torch.set_num_threads(1)` 是**在 import 之后**调的,而 torch 的 OpenMP 线程池在
+**import 时**就按整机核数建好了 —— 限制线程数不会缩小已存在的池子,空闲 worker 在并行区
+之间**忙等自旋**。实测(单变量 A/B,同一片段同一机器):
+
+| | bridge 线程数 | bridge CPU | live 速率 |
+| --- | --- | --- | --- |
+| 修复前 | **35** | **1453% 单核(≈14.5 核)** | 26.5 Hz(丢 135 帧) |
+| 修复后 | **5** | **50% 单核** | **30.0 Hz(丢 0 帧,受输入限速)** |
+
+**CPU 降 29 倍。** 而 bridge 的实际工作量不到半个核 —— 也就是说 **~14 个核在做屏障等待**,
+而这些核本该给旁边的策略(sim2sim 有 53 个线程)。这同时解释了为什么 live 链路一直比
+进程内基准慢:之前测到的 `torch threads=1 → 25.8 ms` 是**进程内、无竞争**的理想值。
+
+修法:`run_live_chain.py` 启动 bridge 时注入 `OMP_NUM_THREADS` / `MKL_NUM_THREADS` /
+`OPENBLAS_NUM_THREADS` / `NUMEXPR_NUM_THREADS` = 1,**在 import 前**生效,池子只建一个 worker。
+**只作用于 bridge**;sim2sim 的策略是真正的大计算量、确实吃线程,不碰它。
+`A3_OMP_THREADS` 可覆盖(`off` 还原系统默认)。
+
+顺带测到的两件事(都不需要动):
+
+- **`--dump-frames` 不是瓶颈**:逐帧 JSONL 落盘 **7.4 µs/帧**(30 Hz 下 0.22 ms/s)。
+- **窗口影响很小**:headless 时 bridge 54.4% 单核,开窗口 70.2%(±16%),两次都跑在 30 Hz、
+  丢 0 帧。sim2sim 自己是 53 线程 / 0.70 核(策略在 CUDA 上)。

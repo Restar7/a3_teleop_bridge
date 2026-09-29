@@ -9,6 +9,7 @@ instead of dying halfway.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -138,6 +139,56 @@ def test_pico_sim_defaults_to_the_viewer():
     assert "VIEWER=1" in source, "the manual teleop entry point should show the window by default"
     assert "--no-viewer" in source
     assert "Space pause" in source, "controls should be echoed to the operator"
+
+
+def test_bridge_process_pins_the_math_runtimes_to_one_thread():
+    """``torch.set_num_threads`` does not shrink a pool that already exists.
+
+    torch builds its OpenMP pool at *import* time, sized to the whole machine,
+    and the spare workers spin between parallel regions.  Capping the thread
+    count from inside the session therefore left the pool intact: the bridge ran
+    at ~35 threads and, measured on this 16-core box, **1453% CPU** while its
+    real work is half a core -- about 14 cores of barrier waits, taken from the
+    policy running beside it.  Naming the count in the environment builds the
+    pool with one worker instead:
+
+        threads   35 -> 5      bridge CPU   1453% -> 50%
+        live rate 26.5 Hz -> 30.0 Hz (drops 135 -> 0, i.e. input-limited)
+
+    Only the bridge is affected; the simulator keeps its own defaults because
+    the policy there is a large enough workload to benefit from threads.
+    """
+    module = _live_chain_module()
+    env = {"PATH": "/usr/bin", "HOME": "/tmp"}  # start from a clean environment
+    old = os.environ.copy()
+    try:
+        os.environ.clear()
+        os.environ.update(env)
+        os.environ.pop("A3_OMP_THREADS", None)
+        built = module.bridge_environment()
+        assert built["OMP_NUM_THREADS"] == "1"
+        assert built["MKL_NUM_THREADS"] == "1"
+
+        os.environ["A3_OMP_THREADS"] = "4"
+        assert module.bridge_environment()["OMP_NUM_THREADS"] == "4"
+
+        for off in ("off", "0", "default"):
+            os.environ["A3_OMP_THREADS"] = off
+            assert "OMP_NUM_THREADS" not in module.bridge_environment()
+    finally:
+        os.environ.clear()
+        os.environ.update(old)
+
+    source = (BRIDGE_ROOT / "tools" / "run_live_chain.py").read_text(encoding="utf-8")
+    assert "env=bridge_environment()" in source, "the env must actually reach the bridge Popen"
+    # it must be attached to the bridge Popen only -- the simulator's policy is a
+    # real multi-threaded workload and must keep its own thread settings
+    bridge_popen = source.split("subprocess.Popen(")
+    pinned = [chunk for chunk in bridge_popen if "env=bridge_environment()" in chunk]
+    assert len(pinned) == 1, "exactly one Popen (the bridge) may be pinned"
+    assert "live_cmd" in pinned[0], "the pinned Popen must be the bridge, not the simulator"
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "A3_OMP_THREADS" in runbook
 
 
 def test_pico_sim_checks_the_pc_service_port():
