@@ -292,6 +292,30 @@ def test_fake_pico_sender_publishes_the_root_by_default():
     assert "the real sender does not" not in source
 
 
+def test_pico_tracker_probe_is_documented_and_runnable():
+    """The "legs barely move" limit is on the headset, and it needs its own probe.
+
+    probe_pico_body.py answers "does the SDK see the legs at all"; it does not
+    answer "is the amplitude anywhere near a walk".  A real 100 s run produced 70
+    leg-lift events -- so the legs *were* tracked -- but at p50 17 deg of knee
+    flexion against the 66-79 deg the validated walk references use.  Without a
+    probe that measures amplitude, that reads as a pipeline bug when it is not.
+    """
+    tool = BRIDGE_ROOT / "tools" / "check_pico_trackers.py"
+    assert tool.is_file()
+    proc = subprocess.run([sys.executable, str(tool), "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    source = tool.read_text(encoding="utf-8")
+    # it must report the tracker count -- 0 explains estimated lower-body tracking
+    assert "get_motion_tracker_serial_numbers" in source
+    assert "walk-grade" in source
+    # and it must clean up after the SDK
+    assert "xrt.close()" in source
+
+    runbook = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
+    assert "check_pico_trackers.py" in runbook
+
+
 def test_pico_sim_exposes_the_fake_sender_for_desk_testing():
     source = (BRIDGE_ROOT / "docs" / "5060_FULL_RUNBOOK.md").read_text(encoding="utf-8")
     assert "tools/fake_pico_sender.py" in source
