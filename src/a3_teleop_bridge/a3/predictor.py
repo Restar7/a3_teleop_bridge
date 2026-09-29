@@ -147,6 +147,14 @@ class PredictorConfig:
     hold_after_ms: float
     invalid_after_ms: float
     max_source_gap_s: float
+    #: Slew limit applied to the *published* reference joints, in rad/s.  This is
+    #: deliberately not the hardware limit: every one of the 20 shipped references
+    #: is clamped at exactly 2.5 rad/s (620 joint samples, none above it, p99 equal
+    #: to max), so 2.5 rad/s is the envelope the policy was trained and validated
+    #: on.  Without it the live reference can demand whatever the solver produces
+    #: -- a real session reached 876 deg/s of elbow, 6.1x the validated ceiling,
+    #: and the robot fell.
+    reference_velocity_limit: float = 2.5
     raw: dict = field(default_factory=dict)
 
     @classmethod
@@ -187,6 +195,7 @@ class PredictorConfig:
             hold_after_ms=float(doc.get("hold_after_ms", 50.0)),
             invalid_after_ms=float(doc.get("invalid_after_ms", 250.0)),
             max_source_gap_s=float(doc.get("max_source_gap_s", 0.5)),
+            reference_velocity_limit=float(doc.get("reference_velocity_limit", 2.5)),
             raw=doc,
         )
 
@@ -283,6 +292,23 @@ class A3ReferencePredictor:
             if omega_norm > self.config.root_angular_velocity_limit:
                 omega = omega * (self.config.root_angular_velocity_limit / omega_norm)
             self.root_omega = omega
+
+        # Slew-limit the joints that are actually published.  ``joint_velocity_limit``
+        # above only bounds the velocity used to *extrapolate* the window's future
+        # frames; the base frame is the raw solver output, so a fast operator move
+        # went out unbounded -- a real session published 876 deg/s of elbow against
+        # a validated ceiling of 2.5 rad/s (143 deg/s, the value every one of the 20
+        # shipped references is clamped at) and the robot fell.  Clamping here makes
+        # the live reference obey the same envelope the offline ones do.
+        if dt is not None and self.last_safe is not None:
+            limit = float(getattr(self.config, "reference_velocity_limit", 0.0) or 0.0)
+            if limit > 0.0:
+                step = np.asarray(joint_pos, dtype=np.float64) - np.asarray(
+                    self.last_safe.joint_pos_rad, dtype=np.float64
+                )
+                max_step = limit * float(dt)
+                np.clip(step, -max_step, max_step, out=step)
+                joint_pos = np.asarray(self.last_safe.joint_pos_rad, dtype=np.float64) + step
 
         filtered = A3CanonicalState(
             seq=state.seq,

@@ -304,3 +304,48 @@ def test_predictor_config_from_yaml():
     assert config.joint_velocity_limit.shape == (29,)
     np.testing.assert_allclose(config.joint_velocity_limit, limits.velocity)
     assert config.hold_after_ms < config.invalid_after_ms
+
+
+def test_published_reference_obeys_the_validated_velocity_envelope():
+    """A fast operator move must not be published faster than the policy has seen.
+
+    Every one of the 20 shipped references is clamped at exactly 2.5 rad/s (620
+    joint samples, p99 equal to max, none above), so 2.5 rad/s is the envelope the
+    policy was trained and validated on.  The predictor's ``joint_velocity_limit``
+    is the *hardware* limit (12-23 rad/s) and only bounds the extrapolation
+    velocity, so the base frame went out unbounded: a real session published
+    876 deg/s of elbow, 6.1x the validated ceiling, and the robot fell.
+    """
+    import numpy as np
+
+    from a3_teleop_bridge.a3.predictor import A3ReferencePredictor, PredictorConfig
+    from a3_teleop_bridge.contract import load_contract
+    from a3_teleop_bridge.types import A3CanonicalState
+
+    config = PredictorConfig.from_yaml()
+    assert abs(config.reference_velocity_limit - 2.5) < 1e-9
+    # it must be well below the hardware limit, or it would not be doing anything
+    assert config.reference_velocity_limit < float(np.min(config.joint_velocity_limit))
+
+    predictor = A3ReferencePredictor()
+    n = load_contract().n_policy_joints
+    dt = 0.02
+    previous = np.zeros(n)
+    for i in range(6):
+        target = previous + 0.5  # 25 rad/s at dt=0.02, 10x the ceiling
+        predictor.push(
+            A3CanonicalState(
+                seq=i,
+                timestamp_ns=int(i * dt * 1e9),
+                root_pos_m=np.array([0.0, 0.0, 1.07]),
+                root_quat_wxyz=np.array([1.0, 0.0, 0.0, 0.0]),
+                joint_pos_rad=target.copy(),
+                joint_vel_rad_s=np.zeros(n),
+                valid=True,
+                solver_latency_ms=1.0,
+            )
+        )
+        step = predictor.last_safe.joint_pos_rad[0] - previous[0]
+        if i > 0:  # the first frame has no predecessor to limit against
+            assert abs(step) <= config.reference_velocity_limit * dt + 1e-9
+        previous = np.asarray(predictor.last_safe.joint_pos_rad).copy()
